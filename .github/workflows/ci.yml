@@ -40,7 +40,9 @@ jobs:
           python -m pytest -q
 
       - name: Run Ruff
-        run: uvx ruff check custom_components tests
+        run: >-
+          uvx --from "ruff==0.16.1"
+          ruff check custom_components tests
 
       - name: Check Python compilation
         run: >-

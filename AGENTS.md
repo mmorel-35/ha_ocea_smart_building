@@ -94,7 +94,15 @@ git diff --check
 
 - Validate `.github/workflows/ci.yml` and `.github/workflows/release.yml` whenever
   either workflow changes.
-- Run Ruff checks when Ruff is available.
+- Run the pinned Ruff lint command used by CI:
+
+```bash
+uvx --from "ruff==0.16.1" ruff check custom_components tests
+```
+
+- Keep detailed tests for the CI and release workflow contracts, including
+  triggers, permissions, pinned tools, quality commands, release-version checks,
+  changelog generation, and the absence of release commands from CI.
 - Add or update tests for changed API, config-flow, translation, CLI, version, and
   release behavior.
 
