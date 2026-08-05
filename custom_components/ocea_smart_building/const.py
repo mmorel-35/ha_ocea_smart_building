@@ -1,7 +1,7 @@
 """Constants for the Ocea Smart Building integration."""
 
 DOMAIN = "ocea_smart_building"
-INTEGRATION_VERSION = "1.0.0"
+INTEGRATION_VERSION = "1.1.0"
 
 # Azure AD B2C
 B2C_TENANT = "osbespaceresident"
