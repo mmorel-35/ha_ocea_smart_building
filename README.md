@@ -4,16 +4,18 @@
 [![release][release-badge]][release-url]
 ![downloads][downloads-badge]
 
-Home Assistant integration to monitor cold and hot water consumption from [Ocea Smart Building](https://espace-resident.ocea-sb.com) resident portal.
+Home Assistant integration to monitor water and heating consumption from the [Ocea Smart Building](https://espace-resident.ocea-sb.com) resident portal.
 
 ## Features
 
 - **Cold water** consumption in m³
 - **Hot water** consumption in m³
-- Compatible with the **Energy dashboard** (water section)
+- **CETC heating** consumption in kWh when available for the dwelling
+- Compatible with the **Energy dashboard** (water and energy sections)
 - Automatic Azure AD B2C authentication (no headless browser needed)
 - Automatic token refresh
 - UI-based configuration
+- Native Home Assistant reconfiguration for the email and password
 
 ## Installation
 
@@ -37,9 +39,18 @@ Settings → Devices & Services → Add Integration → "Ocea Smart Building"
 
 Your dwelling is automatically detected from your Ocea account.
 
+### Reconfiguration
+
+Open Settings → Devices & Services → Ocea Smart Building, then select the native **Reconfigure** action.
+
+- The current email address is prefilled and can be changed.
+- The stored password is never displayed. Leave the password field unchanged to keep it, or enter a new password to replace it.
+- Credentials are validated with Ocea before changes are saved.
+- Home Assistant reloads the integration only when the validated configuration has actually changed.
+
 ## Energy dashboard
 
-The sensors can be added directly in Settings → Dashboards → Energy → Water consumption.
+Add the cold and hot water sensors in Settings → Dashboards → Energy → Water consumption. When available, the CETC heating sensor can also be added as an energy-consumption source.
 
 ## Troubleshooting
 
