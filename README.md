@@ -21,6 +21,8 @@ Home Assistant integration to monitor water and heating consumption from the [Oc
 
 ### Via HACS (recommended)
 
+[![Open your Home Assistant instance and open this repository in HACS](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=Triskae&repository=ha_ocea_smart_building&category=integration)
+
 1. HACS → Integrations → ⋮ → Custom repositories
 2. Add the repository URL, category **Integration**
 3. Search for "Ocea Smart Building" → Install
@@ -31,6 +33,8 @@ Home Assistant integration to monitor water and heating consumption from the [Oc
 Copy `custom_components/ocea_smart_building/` into `config/custom_components/` and restart Home Assistant.
 
 ## Configuration
+
+[![Open your Home Assistant instance and add the integration](https://my.home-assistant.io/badges/config_flow_start.svg)](https://my.home-assistant.io/redirect/config_flow_start/?domain=ocea_smart_building)
 
 Settings → Devices & Services → Add Integration → "Ocea Smart Building"
 
