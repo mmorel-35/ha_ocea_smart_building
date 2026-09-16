@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from datetime import date
 from decimal import Decimal
 from typing import Any
@@ -10,6 +11,8 @@ from requests import RequestException
 
 from .api import OceaApiClient, OceaApiError, OceaAuthError
 from .models import OceaMeter, OceaMeterReading
+
+_LOGGER = logging.getLogger(__name__)
 
 # Single source of truth mapping an Ocea fluid code to its sensor key.
 WATER_FLUID_SENSOR_KEYS: dict[str, str] = {
@@ -95,13 +98,10 @@ class WaterMeterService:
             except OceaAuthError:
                 raise
             except (OceaApiError, RequestException):
+                _LOGGER.warning("Unable to update one water meter")
                 continue
             meter_data[pds_id] = _build_meter_data(meter, response)
         return meter_data
-
-    def build_current_month_payload(self, today: date) -> dict[str, str]:
-        """Build the daily consumption request for the current local month."""
-        return _current_month_payload(today)
 
     def aggregate_dashboard_totals(
         self, raw_data: list[dict[str, str]]

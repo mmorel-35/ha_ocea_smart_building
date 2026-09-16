@@ -15,7 +15,7 @@ from homeassistant.util import dt as dt_util
 from .api import OceaApiClient, OceaApiError, OceaAuthError
 from .const import DEFAULT_SCAN_INTERVAL, DOMAIN
 from .models import OceaMeter
-from .water_meter_service import WaterMeterService
+from .water_meter_service import WaterMeterService, _current_month_payload
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -58,7 +58,7 @@ class OceaDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             )
             if not self._meters_discovered:
                 await self._async_discover_meters()
-            payload = self._service.build_current_month_payload(dt_util.now().date())
+            payload = _current_month_payload(dt_util.now().date())
             meter_data = await self.hass.async_add_executor_job(
                 self._service.fetch_readings, self._meter_metadata, payload
             )
