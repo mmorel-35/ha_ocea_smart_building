@@ -20,6 +20,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from .const import CONF_LOCAL_ID, DOMAIN
 from .coordinator import OceaDataUpdateCoordinator
 from .models import OceaMeter
+from .water_meter_service import WATER_FLUID_SENSOR_KEYS
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -129,8 +130,8 @@ async def async_setup_entry(
 
     if coordinator.data:
         fluid_descriptions = {
-            "EauFroide": descriptions["eau_froide"],
-            "EauChaude": descriptions["eau_chaude"],
+            fluide: descriptions[key]
+            for fluide, key in WATER_FLUID_SENSOR_KEYS.items()
         }
         for meter in coordinator.data.get("meters", {}).values():
             pds = meter.meter.pds

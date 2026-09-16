@@ -16,13 +16,13 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.ocea_smart_building.api import OceaApiError
 from custom_components.ocea_smart_building.const import DOMAIN
-from custom_components.ocea_smart_building.coordinator import (
-    OceaDataUpdateCoordinator,
+from custom_components.ocea_smart_building.coordinator import OceaDataUpdateCoordinator
+from custom_components.ocea_smart_building.models import OceaMeter
+from custom_components.ocea_smart_building.sensor import SENSOR_TYPES, OceaMeterSensor
+from custom_components.ocea_smart_building.water_meter_service import (
     _build_meter_data,
     _current_month_payload,
 )
-from custom_components.ocea_smart_building.models import OceaMeter
-from custom_components.ocea_smart_building.sensor import SENSOR_TYPES, OceaMeterSensor
 
 
 def _coordinator(hass: HomeAssistant, client: Mock) -> OceaDataUpdateCoordinator:
