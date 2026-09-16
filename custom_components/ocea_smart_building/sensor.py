@@ -13,6 +13,7 @@ from homeassistant.components.sensor import (
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import UnitOfEnergy, UnitOfVolume
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
@@ -26,6 +27,27 @@ class OceaSensorEntityDescription(SensorEntityDescription):
     """Describe an Ocea sensor entity."""
 
     data_key: str
+
+
+def _local_device_info(local_id: str) -> DeviceInfo:
+    """Build the Home Assistant device descriptor for dwelling totals."""
+    return DeviceInfo(
+        identifiers={(DOMAIN, local_id)},
+        name=f"Ocea - Local {local_id}",
+        manufacturer="Ocea Smart Building",
+        model="Espace Résident",
+    )
+
+
+def _meter_device_info(local_id: str, meter: OceaMeter) -> DeviceInfo:
+    """Build the Home Assistant device descriptor for one meter."""
+    return DeviceInfo(
+        identifiers={(DOMAIN, f"{local_id}_{meter.identifier}")},
+        name=f"Ocea - Compteur {meter.display_name}",
+        manufacturer="Ocea Smart Building",
+        model="Compteur d'eau",
+        serial_number=meter.serial_number,
+    )
 
 
 SENSOR_TYPES: tuple[OceaSensorEntityDescription, ...] = (
@@ -98,7 +120,7 @@ async def async_setup_entry(
                 if description.key == "eau_chaude"
             ),
         }
-        for pds_id, meter in coordinator.data.get("meters", {}).items():
+        for meter in coordinator.data.get("meters", {}).values():
             pds = meter.meter.pds
             description = descriptions.get(pds.fluid)
             if description is None:
@@ -108,7 +130,6 @@ async def async_setup_entry(
                     coordinator=coordinator,
                     description=description,
                     local_id=local_id,
-                    pds_id=pds_id,
                     meter=meter.meter,
                 )
             )
@@ -134,13 +155,8 @@ class OceaWaterSensor(
         super().__init__(coordinator)
         self.entity_description = description
         self._local_id = local_id
-        self._attr_unique_id = f"{DOMAIN}_{local_id}_{description.key}"
-        self._attr_device_info = {
-            "identifiers": {(DOMAIN, local_id)},
-            "name": f"Ocea - Local {local_id}",
-            "manufacturer": "Ocea Smart Building",
-            "model": "Espace Résident",
-        }
+        self._attr_unique_id = f"{local_id}_{description.key}"
+        self._attr_device_info = _local_device_info(local_id)
 
     @property
     def native_value(self) -> float | None:
@@ -160,26 +176,18 @@ class OceaMeterSensor(OceaWaterSensor):
         coordinator: OceaDataUpdateCoordinator,
         description: OceaSensorEntityDescription,
         local_id: str,
-        pds_id: str,
         meter: OceaMeter,
     ) -> None:
         """Initialize an individual meter sensor."""
         super().__init__(coordinator, description, local_id)
-        serial = str(meter.serial_number or "").strip()
-        identity = f"{serial} (PDS {pds_id})" if serial else f"PDS {pds_id}"
-        self._pds_id = pds_id
-        self._attr_unique_id = f"{DOMAIN}_{local_id}_{pds_id}_{description.key}"
-        self._attr_device_info = {
-            "identifiers": {(DOMAIN, f"{local_id}_{pds_id}")},
-            "name": f"Ocea - Compteur {identity}",
-            "manufacturer": "Ocea Smart Building",
-            "model": "Compteur d'eau",
-        }
+        self._meter = meter
+        self._attr_unique_id = f"{local_id}_{meter.identifier}_{description.key}"
+        self._attr_device_info = _meter_device_info(local_id, meter)
 
     @property
     def native_value(self) -> float | None:
         """Return this meter's current-month consumption."""
         if self.coordinator.data is None:
             return None
-        meter = self.coordinator.data.get("meters", {}).get(self._pds_id)
-        return meter.value if meter else None
+        reading = self.coordinator.data.get("meters", {}).get(self._meter.identifier)
+        return reading.value if reading else None

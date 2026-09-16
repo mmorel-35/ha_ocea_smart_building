@@ -50,6 +50,18 @@ def test_meter_model_links_pds_and_device() -> None:
     assert meter.pds.id == "pds-cold-1"
     assert meter.serial_number == "SERIAL-1"
     assert meter.device_id == "device-1"
+    assert meter.identifier == "pds-cold-1"
+    assert meter.display_name == "SERIAL-1 (PDS pds-cold-1)"
+
+
+def test_meter_display_name_falls_back_to_pds_id() -> None:
+    """Test meter naming remains useful without a serial number."""
+    meter = OceaMeter.from_api(
+        {"id": "pds-cold-1", "fluide": "EauFroide"},
+        None,
+    )
+
+    assert meter.display_name == "PDS pds-cold-1"
 
 
 def test_meter_reading_can_be_unavailable() -> None:

@@ -39,6 +39,18 @@ class OceaMeter:
     serial_number: str | None = None
     installation_date: str | None = None
 
+    @property
+    def identifier(self) -> str:
+        """Return the stable Ocea identifier for this meter."""
+        return self.pds.id
+
+    @property
+    def display_name(self) -> str:
+        """Return a human-readable meter identity."""
+        if self.serial_number:
+            return f"{self.serial_number} (PDS {self.identifier})"
+        return f"PDS {self.identifier}"
+
     @classmethod
     def from_api(
         cls,
