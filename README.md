@@ -60,7 +60,9 @@ when several meters measure the same fluid.
 When the detailed Ocea response includes `fuiteEstimee`, an additional
 `Fuite estimée` sensor is created for that meter. It uses m³ and represents the
 latest leak estimate reported by Ocea; it is not created when Ocea provides no
-leak estimate.
+leak estimate. If Ocea starts reporting a leak after setup, the entity is added
+automatically during the next coordinator update; no integration reload is
+needed.
 
 The integration discovers the available PDS and meter serial numbers during
 setup, then refreshes each meter's consumption for the current calendar month.

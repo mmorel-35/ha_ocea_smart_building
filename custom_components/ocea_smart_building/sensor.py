@@ -12,7 +12,7 @@ from homeassistant.components.sensor import (
 )
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import UnitOfEnergy, UnitOfVolume
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
@@ -48,6 +48,16 @@ def _meter_device_info(local_id: str, meter: OceaMeter) -> DeviceInfo:
         translation_key="meter",
         translation_placeholders={"meter_identity": meter.display_name},
     )
+
+
+def _local_entity_unique_id(local_id: str, key: str) -> str:
+    """Build the established unique ID for a dwelling-level sensor."""
+    return f"{DOMAIN}_{local_id}_{key}"
+
+
+def _meter_entity_unique_id(local_id: str, meter: OceaMeter, key: str) -> str:
+    """Build the established unique ID for an individual meter sensor."""
+    return f"{DOMAIN}_{local_id}_{meter.identifier}_{key}"
 
 
 SENSOR_TYPES: tuple[OceaSensorEntityDescription, ...] = (
@@ -102,9 +112,12 @@ async def async_setup_entry(
     """Set up Ocea Smart Building sensors from a config entry."""
     coordinator: OceaDataUpdateCoordinator = hass.data[DOMAIN][config_entry.entry_id]
     local_id = config_entry.data[CONF_LOCAL_ID]
+    descriptions = {description.key: description for description in SENSOR_TYPES}
 
     entities: list[OceaWaterSensor] = []
     for description in SENSOR_TYPES:
+        if description.key == "fuite":
+            continue
         if coordinator.data and description.data_key in coordinator.data:
             entities.append(
                 OceaWaterSensor(
@@ -115,21 +128,13 @@ async def async_setup_entry(
             )
 
     if coordinator.data:
-        descriptions = {
-            "EauFroide": next(
-                description
-                for description in SENSOR_TYPES
-                if description.key == "eau_froide"
-            ),
-            "EauChaude": next(
-                description
-                for description in SENSOR_TYPES
-                if description.key == "eau_chaude"
-            ),
+        fluid_descriptions = {
+            "EauFroide": descriptions["eau_froide"],
+            "EauChaude": descriptions["eau_chaude"],
         }
         for meter in coordinator.data.get("meters", {}).values():
             pds = meter.meter.pds
-            description = descriptions.get(pds.fluid)
+            description = fluid_descriptions.get(pds.fluid)
             if description is None:
                 continue
             entities.append(
@@ -144,17 +149,43 @@ async def async_setup_entry(
                 entities.append(
                     OceaMeterSensor(
                         coordinator=coordinator,
-                        description=next(
-                            description
-                            for description in SENSOR_TYPES
-                            if description.key == "fuite"
-                        ),
+                        description=descriptions["fuite"],
                         local_id=local_id,
                         meter=meter.meter,
                     )
                 )
 
     async_add_entities(entities, update_before_add=True)
+
+    leak_entity_keys = {
+        meter.meter.identifier
+        for meter in (coordinator.data or {}).get("meters", {}).values()
+        if meter.estimated_leak is not None
+    }
+
+    @callback
+    def _async_add_new_leak_entities() -> None:
+        """Add leak entities when Ocea starts reporting an estimate."""
+        new_entities: list[OceaMeterSensor] = []
+        for reading in (coordinator.data or {}).get("meters", {}).values():
+            if reading.estimated_leak is None:
+                continue
+            meter = reading.meter
+            if meter.identifier in leak_entity_keys:
+                continue
+            leak_entity_keys.add(meter.identifier)
+            new_entities.append(
+                OceaMeterSensor(
+                    coordinator=coordinator,
+                    description=descriptions["fuite"],
+                    local_id=local_id,
+                    meter=meter,
+                )
+            )
+        if new_entities:
+            async_add_entities(new_entities, update_before_add=True)
+
+    coordinator.async_add_listener(_async_add_new_leak_entities)
 
 
 class OceaWaterSensor(
@@ -175,7 +206,7 @@ class OceaWaterSensor(
         super().__init__(coordinator)
         self.entity_description = description
         self._local_id = local_id
-        self._attr_unique_id = f"{local_id}_{description.key}"
+        self._attr_unique_id = _local_entity_unique_id(local_id, description.key)
         self._attr_device_info = _local_device_info(local_id)
 
     @property
@@ -201,7 +232,9 @@ class OceaMeterSensor(OceaWaterSensor):
         """Initialize an individual meter sensor."""
         super().__init__(coordinator, description, local_id)
         self._meter = meter
-        self._attr_unique_id = f"{local_id}_{meter.identifier}_{description.key}"
+        self._attr_unique_id = _meter_entity_unique_id(
+            local_id, meter, description.key
+        )
         self._attr_device_info = _meter_device_info(local_id, meter)
 
     @property

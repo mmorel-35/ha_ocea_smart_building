@@ -297,7 +297,9 @@ def test_meter_sensor_uses_pds_id_and_serial_for_identity() -> None:
         ),
     )
 
-    assert sensor.unique_id == "local-123_pds-cold-1_eau_froide"
+    assert sensor.unique_id == (
+        "ocea_smart_building_local-123_pds-cold-1_eau_froide"
+    )
     assert sensor.has_entity_name is True
     assert sensor.entity_description.translation_key == "eau_froide"
     assert sensor.entity_description.name is UNDEFINED
