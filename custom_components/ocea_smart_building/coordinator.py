@@ -16,6 +16,7 @@ from requests import RequestException
 
 from .api import OceaApiClient, OceaApiError, OceaAuthError
 from .const import DEFAULT_SCAN_INTERVAL, DOMAIN
+from .models import OceaMeter, OceaMeterReading
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -30,21 +31,21 @@ def _current_month_payload(today: date) -> dict[str, str]:
 
 
 def _build_meter_data(
-    metadata: dict[str, Any], response: dict[str, Any]
-) -> dict[str, Any]:
+    meter: OceaMeter, response: dict[str, Any]
+) -> OceaMeterReading:
     """Aggregate one PDS response while preserving its metadata."""
     total = Decimal(0)
-    latest_date = ""
+    latest_date: str | None = None
     for item in response.get("consommations", []):
         value = Decimal(str(item.get("valeur", 0)).replace(",", "."))
         total += value
         item_date = str(item.get("date", ""))
-        latest_date = max(item_date, latest_date)
-    return {
-        **metadata,
-        "value": float(total),
-        "date": latest_date,
-    }
+        latest_date = max(item_date, latest_date or item_date)
+    return OceaMeterReading(
+        meter=meter,
+        value=float(total),
+        latest_date=latest_date,
+    )
 
 
 class OceaDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
@@ -65,7 +66,7 @@ class OceaDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             update_interval=timedelta(seconds=DEFAULT_SCAN_INTERVAL),
         )
         self.client = client
-        self._meter_metadata: dict[str, dict[str, Any]] = {}
+        self._meter_metadata: dict[str, OceaMeter] = {}
         self._meters_discovered = False
 
     async def _async_discover_meters(self) -> None:
@@ -86,10 +87,10 @@ class OceaDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             if item.get("pdsId")
         }
         self._meter_metadata = {
-            str(item["id"]): {
-                "pds": item,
-                "appareil": appareils_by_pds.get(str(item["id"])),
-            }
+            str(item["id"]): OceaMeter.from_api(
+                item,
+                appareils_by_pds.get(str(item["id"])),
+            )
             for item in pds_data
             if item.get("id")
             and item.get("fluide") in ("EauFroide", "EauChaude")
@@ -98,13 +99,13 @@ class OceaDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
     async def _async_update_meters(
         self, payload: dict[str, str]
-    ) -> dict[str, dict[str, Any]]:
+    ) -> dict[str, OceaMeterReading]:
         """Fetch current-month consumption for each discovered meter."""
         meter_data = {
-            pds_id: {**metadata, "value": None, "date": ""}
-            for pds_id, metadata in self._meter_metadata.items()
+            pds_id: OceaMeterReading(meter=meter, value=None, latest_date=None)
+            for pds_id, meter in self._meter_metadata.items()
         }
-        for pds_id, metadata in self._meter_metadata.items():
+        for pds_id, meter in self._meter_metadata.items():
             try:
                 response = await self.hass.async_add_executor_job(
                     self.client.get_pds_consumption,
@@ -116,7 +117,7 @@ class OceaDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             except (OceaApiError, RequestException):
                 _LOGGER.warning("Unable to update one water meter")
                 continue
-            meter_data[pds_id] = _build_meter_data(metadata, response)
+            meter_data[pds_id] = _build_meter_data(meter, response)
         return meter_data
 
     async def _async_update_data(self) -> dict[str, Any]:

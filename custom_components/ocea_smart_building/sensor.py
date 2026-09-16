@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
 
 from homeassistant.components.sensor import (
     SensorDeviceClass,
@@ -19,6 +18,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import CONF_LOCAL_ID, DOMAIN
 from .coordinator import OceaDataUpdateCoordinator
+from .models import OceaMeter
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -99,8 +99,8 @@ async def async_setup_entry(
             ),
         }
         for pds_id, meter in coordinator.data.get("meters", {}).items():
-            pds = meter.get("pds", {})
-            description = descriptions.get(pds.get("fluide"))
+            pds = meter.meter.pds
+            description = descriptions.get(pds.fluid)
             if description is None:
                 continue
             entities.append(
@@ -109,8 +109,7 @@ async def async_setup_entry(
                     description=description,
                     local_id=local_id,
                     pds_id=pds_id,
-                    pds=pds,
-                    appareil=meter.get("appareil"),
+                    meter=meter.meter,
                 )
             )
 
@@ -154,7 +153,7 @@ class OceaWaterSensor(
 class OceaMeterSensor(OceaWaterSensor):
     """Representation of one PDS consumption sensor."""
 
-    _attr_has_entity_name = False
+    _attr_has_entity_name = True
 
     def __init__(
         self,
@@ -162,16 +161,14 @@ class OceaMeterSensor(OceaWaterSensor):
         description: OceaSensorEntityDescription,
         local_id: str,
         pds_id: str,
-        pds: dict[str, Any],
-        appareil: dict[str, Any] | None,
+        meter: OceaMeter,
     ) -> None:
         """Initialize an individual meter sensor."""
         super().__init__(coordinator, description, local_id)
-        serial = str((appareil or {}).get("numeroSerie", "")).strip()
-        identity = f"{serial}, PDS {pds_id}" if serial else f"PDS {pds_id}"
+        serial = str(meter.serial_number or "").strip()
+        identity = f"{serial} (PDS {pds_id})" if serial else f"PDS {pds_id}"
         self._pds_id = pds_id
         self._attr_unique_id = f"{DOMAIN}_{local_id}_{pds_id}_{description.key}"
-        self._attr_name = f"{description.name} ({identity})"
         self._attr_device_info = {
             "identifiers": {(DOMAIN, f"{local_id}_{pds_id}")},
             "name": f"Ocea - Compteur {identity}",
@@ -185,4 +182,4 @@ class OceaMeterSensor(OceaWaterSensor):
         if self.coordinator.data is None:
             return None
         meter = self.coordinator.data.get("meters", {}).get(self._pds_id)
-        return meter.get("value") if meter else None
+        return meter.value if meter else None

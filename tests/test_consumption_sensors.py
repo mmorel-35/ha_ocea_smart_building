@@ -20,6 +20,7 @@ from custom_components.ocea_smart_building.coordinator import (
     _build_meter_data,
     _current_month_payload,
 )
+from custom_components.ocea_smart_building.models import OceaMeter
 from custom_components.ocea_smart_building.sensor import SENSOR_TYPES, OceaMeterSensor
 
 
@@ -51,24 +52,24 @@ def test_sensor_types_include_cetc_heating_energy_sensor() -> None:
 
 def test_meter_data_builder_aggregates_one_meter_response() -> None:
     """Test meter response parsing is isolated from coordinator I/O."""
-    metadata = {
-        "pds": {"id": "pds-cold-1", "fluide": "EauFroide"},
-        "appareil": {"pdsId": "pds-cold-1", "numeroSerie": "SERIAL-1"},
-    }
+    meter = OceaMeter.from_api(
+        {"id": "pds-cold-1", "fluide": "EauFroide"},
+        {"pdsId": "pds-cold-1", "numeroSerie": "SERIAL-1"},
+    )
 
     assert _build_meter_data(
-        metadata,
+        meter,
         {
             "consommations": [
                 {"date": "2026-09-01", "valeur": "0,321"},
                 {"date": "2026-09-15", "valeur": 0.654},
             ]
         },
-    ) == {
-        **metadata,
-        "value": 0.975,
-        "date": "2026-09-15",
-    }
+    ).value == 0.975
+    assert _build_meter_data(
+        meter,
+        {"consommations": [{"date": "2026-09-15", "valeur": 0.654}]},
+    ).latest_date == "2026-09-15"
 
 
 def test_current_month_payload_uses_requested_calendar_date() -> None:
@@ -149,28 +150,12 @@ async def test_coordinator_keeps_consumption_separate_per_pds(
     data = await coordinator._async_update_data()
 
     assert data["eau_froide"] == 1.14
-    assert data["meters"] == {
-        "pds-cold-1": {
-            "pds": {
-                "id": "pds-cold-1",
-                "fluide": "EauFroide",
-                "emplacement": "Cuisine",
-            },
-            "appareil": {"pdsId": "pds-cold-1", "numeroSerie": "SERIAL-1"},
-            "value": 0.321,
-            "date": "2026-09-15",
-        },
-        "pds-cold-2": {
-            "pds": {
-                "id": "pds-cold-2",
-                "fluide": "EauFroide",
-                "emplacement": "Salle de bain",
-            },
-            "appareil": {"pdsId": "pds-cold-2", "numeroSerie": "SERIAL-2"},
-            "value": 0.654,
-            "date": "2026-09-15",
-        },
-    }
+    assert data["meters"]["pds-cold-1"].meter.pds.location == "Cuisine"
+    assert data["meters"]["pds-cold-1"].meter.serial_number == "SERIAL-1"
+    assert data["meters"]["pds-cold-1"].value == 0.321
+    assert data["meters"]["pds-cold-2"].meter.pds.location == "Salle de bain"
+    assert data["meters"]["pds-cold-2"].meter.serial_number == "SERIAL-2"
+    assert data["meters"]["pds-cold-2"].value == 0.654
 
 
 async def test_coordinator_discovers_meters_only_once(
@@ -221,7 +206,7 @@ async def test_coordinator_keeps_other_meters_when_one_fails(
 
     assert data["eau_froide"] == 1.14
     assert set(data["meters"]) == {"pds-cold-1", "pds-cold-2"}
-    assert data["meters"]["pds-cold-2"]["value"] is None
+    assert data["meters"]["pds-cold-2"].value is None
 
 
 async def test_coordinator_does_not_log_meter_details(
@@ -260,12 +245,18 @@ def test_meter_sensor_uses_pds_id_and_serial_for_identity() -> None:
         description=description,
         local_id="local-123",
         pds_id="pds-cold-1",
-        pds={"id": "pds-cold-1", "fluide": "EauFroide"},
-        appareil={"pdsId": "pds-cold-1", "numeroSerie": "SERIAL-1"},
+        meter=OceaMeter.from_api(
+            {"id": "pds-cold-1", "fluide": "EauFroide"},
+            {"pdsId": "pds-cold-1", "numeroSerie": "SERIAL-1"},
+        ),
     )
 
     assert sensor.unique_id == "ocea_smart_building_local-123_pds-cold-1_eau_froide"
-    assert sensor.name == "Eau froide (SERIAL-1, PDS pds-cold-1)"
+    assert sensor.has_entity_name is True
+    assert sensor.entity_description.translation_key == "eau_froide"
+    assert sensor.entity_description.name == "Eau froide"
+    assert not hasattr(sensor, "_attr_name")
     assert sensor.device_info["identifiers"] == {
         ("ocea_smart_building", "local-123_pds-cold-1")
     }
+    assert sensor.device_info["name"] == "Ocea - Compteur SERIAL-1 (PDS pds-cold-1)"
