@@ -33,9 +33,9 @@ def _local_device_info(local_id: str) -> DeviceInfo:
     """Build the Home Assistant device descriptor for dwelling totals."""
     return DeviceInfo(
         identifiers={(DOMAIN, local_id)},
-        name=f"Ocea - Local {local_id}",
         manufacturer="Ocea Smart Building",
-        model="Espace Résident",
+        translation_key="local",
+        translation_placeholders={"local_id": local_id},
     )
 
 
@@ -43,10 +43,10 @@ def _meter_device_info(local_id: str, meter: OceaMeter) -> DeviceInfo:
     """Build the Home Assistant device descriptor for one meter."""
     return DeviceInfo(
         identifiers={(DOMAIN, f"{local_id}_{meter.identifier}")},
-        name=f"Ocea - Compteur {meter.display_name}",
         manufacturer="Ocea Smart Building",
-        model="Compteur d'eau",
         serial_number=meter.serial_number,
+        translation_key="meter",
+        translation_placeholders={"meter_identity": meter.display_name},
     )
 
 
@@ -55,7 +55,6 @@ SENSOR_TYPES: tuple[OceaSensorEntityDescription, ...] = (
         key="eau_froide",
         data_key="eau_froide",
         translation_key="eau_froide",
-        name="Eau froide",
         native_unit_of_measurement=UnitOfVolume.CUBIC_METERS,
         device_class=SensorDeviceClass.WATER,
         state_class=SensorStateClass.TOTAL_INCREASING,
@@ -66,7 +65,6 @@ SENSOR_TYPES: tuple[OceaSensorEntityDescription, ...] = (
         key="eau_chaude",
         data_key="eau_chaude",
         translation_key="eau_chaude",
-        name="Eau chaude",
         native_unit_of_measurement=UnitOfVolume.CUBIC_METERS,
         device_class=SensorDeviceClass.WATER,
         state_class=SensorStateClass.TOTAL_INCREASING,
@@ -77,7 +75,6 @@ SENSOR_TYPES: tuple[OceaSensorEntityDescription, ...] = (
         key="cetc",
         data_key="cetc",
         translation_key="cetc",
-        name="Chauffage thermique",
         native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
         device_class=SensorDeviceClass.ENERGY,
         state_class=SensorStateClass.TOTAL_INCREASING,

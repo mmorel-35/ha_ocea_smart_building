@@ -53,5 +53,13 @@
         "name": "Thermal heating"
       }
     }
+  },
+  "device": {
+    "local": {
+      "name": "Ocea - Dwelling {local_id}"
+    },
+    "meter": {
+      "name": "Ocea - Meter {meter_identity}"
+    }
   }
 }

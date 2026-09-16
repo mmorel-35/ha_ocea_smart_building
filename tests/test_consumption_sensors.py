@@ -11,6 +11,7 @@ import pytest
 from homeassistant.components.sensor import SensorDeviceClass, SensorStateClass
 from homeassistant.const import UnitOfEnergy, UnitOfVolume
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.typing import UNDEFINED
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.ocea_smart_building.api import OceaApiError
@@ -44,7 +45,7 @@ def test_sensor_types_include_cetc_heating_energy_sensor() -> None:
     cetc = sensors["cetc"]
     assert cetc.data_key == "cetc"
     assert cetc.translation_key == "cetc"
-    assert cetc.name == "Chauffage thermique"
+    assert cetc.name is UNDEFINED
     assert cetc.native_unit_of_measurement == UnitOfEnergy.KILO_WATT_HOUR
     assert cetc.device_class is SensorDeviceClass.ENERGY
     assert cetc.state_class is SensorStateClass.TOTAL_INCREASING
@@ -253,9 +254,12 @@ def test_meter_sensor_uses_pds_id_and_serial_for_identity() -> None:
     assert sensor.unique_id == "local-123_pds-cold-1_eau_froide"
     assert sensor.has_entity_name is True
     assert sensor.entity_description.translation_key == "eau_froide"
-    assert sensor.entity_description.name == "Eau froide"
+    assert sensor.entity_description.name is UNDEFINED
     assert not hasattr(sensor, "_attr_name")
     assert sensor.device_info["identifiers"] == {
         ("ocea_smart_building", "local-123_pds-cold-1")
     }
-    assert sensor.device_info["name"] == "Ocea - Compteur SERIAL-1 (PDS pds-cold-1)"
+    assert sensor.device_info["translation_key"] == "meter"
+    assert sensor.device_info["translation_placeholders"] == {
+        "meter_identity": "SERIAL-1 (PDS pds-cold-1)"
+    }

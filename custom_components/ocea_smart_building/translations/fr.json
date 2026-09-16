@@ -53,5 +53,13 @@
         "name": "Chauffage thermique"
       }
     }
+  },
+  "device": {
+    "local": {
+      "name": "Ocea - Logement {local_id}"
+    },
+    "meter": {
+      "name": "Ocea - Compteur {meter_identity}"
+    }
   }
 }
