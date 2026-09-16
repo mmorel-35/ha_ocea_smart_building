@@ -81,6 +81,16 @@ SENSOR_TYPES: tuple[OceaSensorEntityDescription, ...] = (
         icon="mdi:radiator",
         suggested_display_precision=2,
     ),
+    OceaSensorEntityDescription(
+        key="fuite",
+        data_key="fuite",
+        translation_key="fuite",
+        native_unit_of_measurement=UnitOfVolume.CUBIC_METERS,
+        device_class=SensorDeviceClass.WATER,
+        state_class=SensorStateClass.MEASUREMENT,
+        icon="mdi:pipe-leak",
+        suggested_display_precision=3,
+    ),
 )
 
 
@@ -130,6 +140,19 @@ async def async_setup_entry(
                     meter=meter.meter,
                 )
             )
+            if meter.estimated_leak is not None:
+                entities.append(
+                    OceaMeterSensor(
+                        coordinator=coordinator,
+                        description=next(
+                            description
+                            for description in SENSOR_TYPES
+                            if description.key == "fuite"
+                        ),
+                        local_id=local_id,
+                        meter=meter.meter,
+                    )
+                )
 
     async_add_entities(entities, update_before_add=True)
 
@@ -187,4 +210,6 @@ class OceaMeterSensor(OceaWaterSensor):
         if self.coordinator.data is None:
             return None
         reading = self.coordinator.data.get("meters", {}).get(self._meter.identifier)
-        return reading.value if reading else None
+        if reading is None:
+            return None
+        return reading.estimated_leak if self.entity_description.key == "fuite" else reading.value

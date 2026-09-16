@@ -38,6 +38,7 @@ class OceaMeter:
     device_id: str | None = None
     serial_number: str | None = None
     installation_date: str | None = None
+    correction_factor: float | None = None
 
     @property
     def identifier(self) -> str:
@@ -64,6 +65,7 @@ class OceaMeter:
             device_id=device.get("id"),
             serial_number=device.get("numeroSerie"),
             installation_date=device.get("datePose"),
+            correction_factor=device.get("fc"),
         )
 
 
@@ -74,3 +76,7 @@ class OceaMeterReading:
     meter: OceaMeter
     value: float | None
     latest_date: str | None
+    unit: str | None = None
+    estimated_leak: float | None = None
+    consent: bool | None = None
+    response_type: str | None = None

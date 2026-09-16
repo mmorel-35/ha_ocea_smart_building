@@ -57,6 +57,11 @@ identity. When Ocea provides a serial number, it is shown in the sensor and
 device name alongside the PDS identifier. This keeps sensors distinguishable
 when several meters measure the same fluid.
 
+When the detailed Ocea response includes `fuiteEstimee`, an additional
+`Fuite estimée` sensor is created for that meter. It uses m³ and represents the
+latest leak estimate reported by Ocea; it is not created when Ocea provides no
+leak estimate.
+
 The integration discovers the available PDS and meter serial numbers during
 setup, then refreshes each meter's consumption for the current calendar month.
 If one meter is temporarily unavailable, its entity remains present but has no
@@ -80,7 +85,9 @@ Add the cold and hot water sensors in Settings → Dashboards → Energy → Wat
 
 Individual water-meter sensors are useful for separate dashboards and
 comparisons. Use the dwelling-level sensors when you need the total reported by
-the Ocea resident portal.
+the Ocea resident portal. Do not add both dwelling totals and their individual
+meters to the same Energy Dashboard water configuration, or the same water
+consumption will be counted twice.
 
 ## Troubleshooting
 

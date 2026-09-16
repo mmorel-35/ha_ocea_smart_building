@@ -51,6 +51,9 @@
       },
       "cetc": {
         "name": "Chauffage thermique"
+      },
+      "fuite": {
+        "name": "Fuite estimée"
       }
     }
   },

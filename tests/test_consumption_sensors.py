@@ -38,7 +38,7 @@ def test_sensor_types_include_cetc_heating_energy_sensor() -> None:
     """Test CETC heating consumption is exposed as an energy sensor."""
     sensors = {description.key: description for description in SENSOR_TYPES}
 
-    assert set(sensors) == {"eau_froide", "eau_chaude", "cetc"}
+    assert {"eau_froide", "eau_chaude", "cetc"} <= set(sensors)
     assert sensors["eau_froide"].native_unit_of_measurement == UnitOfVolume.CUBIC_METERS
     assert sensors["eau_chaude"].native_unit_of_measurement == UnitOfVolume.CUBIC_METERS
 
@@ -49,6 +49,16 @@ def test_sensor_types_include_cetc_heating_energy_sensor() -> None:
     assert cetc.native_unit_of_measurement == UnitOfEnergy.KILO_WATT_HOUR
     assert cetc.device_class is SensorDeviceClass.ENERGY
     assert cetc.state_class is SensorStateClass.TOTAL_INCREASING
+
+
+def test_leak_sensor_description_is_water_measurement() -> None:
+    """Test estimated leaks use the standard water measurement contract."""
+    leak = next(description for description in SENSOR_TYPES if description.key == "fuite")
+
+    assert leak.translation_key == "fuite"
+    assert leak.native_unit_of_measurement == UnitOfVolume.CUBIC_METERS
+    assert leak.device_class is SensorDeviceClass.WATER
+    assert leak.state_class is SensorStateClass.MEASUREMENT
 
 
 def test_meter_data_builder_aggregates_one_meter_response() -> None:
@@ -157,6 +167,42 @@ async def test_coordinator_keeps_consumption_separate_per_pds(
     assert data["meters"]["pds-cold-2"].meter.pds.location == "Salle de bain"
     assert data["meters"]["pds-cold-2"].meter.serial_number == "SERIAL-2"
     assert data["meters"]["pds-cold-2"].value == 0.654
+
+
+def test_meter_data_builder_keeps_latest_leak_estimate() -> None:
+    """Test the latest leak estimate is retained from the daily response."""
+    meter = OceaMeter.from_api(
+        {"id": "pds-cold-1", "fluide": "EauFroide"},
+        None,
+    )
+
+    reading = _build_meter_data(
+        meter,
+        {
+            "unite": "m3",
+            "consommations": [
+                {
+                    "date": "2026-09-01",
+                    "valeur": 0.1,
+                    "fuiteEstimee": 0.0,
+                    "consentement": True,
+                    "type": "ConsommationEauResponse",
+                },
+                {
+                    "date": "2026-09-15",
+                    "valeur": 0.2,
+                    "fuiteEstimee": 0.015,
+                    "consentement": True,
+                    "type": "ConsommationEauResponse",
+                },
+            ],
+        },
+    )
+
+    assert reading.value == 0.3
+    assert reading.estimated_leak == 0.015
+    assert reading.unit == "m3"
+    assert reading.latest_date == "2026-09-15"
 
 
 async def test_coordinator_discovers_meters_only_once(

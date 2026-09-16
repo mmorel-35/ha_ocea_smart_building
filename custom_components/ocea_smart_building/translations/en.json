@@ -51,6 +51,9 @@
       },
       "cetc": {
         "name": "Thermal heating"
+      },
+      "fuite": {
+        "name": "Estimated leak"
       }
     }
   },

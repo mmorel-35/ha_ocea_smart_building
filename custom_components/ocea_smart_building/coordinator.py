@@ -36,15 +36,23 @@ def _build_meter_data(
     """Aggregate one PDS response while preserving its metadata."""
     total = Decimal(0)
     latest_date: str | None = None
+    latest_item: dict[str, Any] | None = None
     for item in response.get("consommations", []):
         value = Decimal(str(item.get("valeur", 0)).replace(",", "."))
         total += value
         item_date = str(item.get("date", ""))
-        latest_date = max(item_date, latest_date or item_date)
+        if latest_date is None or item_date >= latest_date:
+            latest_date = item_date
+            latest_item = item
+    latest_item = latest_item or {}
     return OceaMeterReading(
         meter=meter,
         value=float(total),
         latest_date=latest_date,
+        unit=response.get("unite"),
+        estimated_leak=latest_item.get("fuiteEstimee"),
+        consent=latest_item.get("consentement"),
+        response_type=latest_item.get("type"),
     )
 
 
