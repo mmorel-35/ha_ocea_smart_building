@@ -11,14 +11,25 @@ import pytest
 from homeassistant.components.sensor import SensorDeviceClass, SensorStateClass
 from homeassistant.const import UnitOfEnergy, UnitOfVolume
 from homeassistant.core import HomeAssistant
+from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.ocea_smart_building.api import OceaApiError
+from custom_components.ocea_smart_building.const import DOMAIN
 from custom_components.ocea_smart_building.coordinator import (
     OceaDataUpdateCoordinator,
     _build_meter_data,
     _current_month_payload,
 )
 from custom_components.ocea_smart_building.sensor import SENSOR_TYPES, OceaMeterSensor
+
+
+def _coordinator(hass: HomeAssistant, client: Mock) -> OceaDataUpdateCoordinator:
+    """Create a coordinator bound to an actual config entry."""
+    entry = MockConfigEntry(domain=DOMAIN)
+    entry.add_to_hass(hass)
+    coordinator = OceaDataUpdateCoordinator(hass, client, entry)
+    assert coordinator.config_entry is entry
+    return coordinator
 
 
 def test_sensor_types_include_cetc_heating_energy_sensor() -> None:
@@ -80,7 +91,7 @@ async def test_coordinator_uses_home_assistant_timezone(
     ]
     client.get_appareils.return_value = []
     client.get_pds_consumption.return_value = {"consommations": []}
-    coordinator = OceaDataUpdateCoordinator(hass, client)
+    coordinator = _coordinator(hass, client)
 
     with patch(
         "custom_components.ocea_smart_building.coordinator.dt_util.now",
@@ -102,7 +113,7 @@ async def test_coordinator_normalizes_cetc_consumption(hass: HomeAssistant) -> N
     ]
     client.get_pds.return_value = []
     client.get_appareils.return_value = []
-    coordinator = OceaDataUpdateCoordinator(hass, client)
+    coordinator = _coordinator(hass, client)
 
     data = await coordinator._async_update_data()
 
@@ -133,7 +144,7 @@ async def test_coordinator_keeps_consumption_separate_per_pds(
         {"unite": "m3", "consommations": [{"date": "2026-09-15", "valeur": 0.321}]},
         {"unite": "m3", "consommations": [{"date": "2026-09-15", "valeur": 0.654}]},
     ]
-    coordinator = OceaDataUpdateCoordinator(hass, client)
+    coordinator = _coordinator(hass, client)
 
     data = await coordinator._async_update_data()
 
@@ -177,7 +188,7 @@ async def test_coordinator_discovers_meters_only_once(
     client.get_pds_consumption.return_value = {
         "consommations": [{"date": "2026-09-15", "valeur": 0.321}],
     }
-    coordinator = OceaDataUpdateCoordinator(hass, client)
+    coordinator = _coordinator(hass, client)
 
     await coordinator._async_update_data()
     await coordinator._async_update_data()
@@ -204,12 +215,13 @@ async def test_coordinator_keeps_other_meters_when_one_fails(
         {"consommations": [{"date": "2026-09-15", "valeur": 0.321}]},
         OceaApiError("meter unavailable"),
     ]
-    coordinator = OceaDataUpdateCoordinator(hass, client)
+    coordinator = _coordinator(hass, client)
 
     data = await coordinator._async_update_data()
 
     assert data["eau_froide"] == 1.14
-    assert set(data["meters"]) == {"pds-cold-1"}
+    assert set(data["meters"]) == {"pds-cold-1", "pds-cold-2"}
+    assert data["meters"]["pds-cold-2"]["value"] is None
 
 
 async def test_coordinator_does_not_log_meter_details(
@@ -226,7 +238,7 @@ async def test_coordinator_does_not_log_meter_details(
         {"pdsId": "pds-secret", "numeroSerie": "serial-secret"},
     ]
     client.get_pds_consumption.return_value = {"consommations": []}
-    coordinator = OceaDataUpdateCoordinator(hass, client)
+    coordinator = _coordinator(hass, client)
 
     with caplog.at_level(logging.DEBUG):
         await coordinator._async_update_data()

@@ -7,6 +7,7 @@ from datetime import date, timedelta
 from decimal import Decimal
 from typing import Any
 
+from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
@@ -49,12 +50,18 @@ def _build_meter_data(
 class OceaDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     """Manage fetching Ocea consumption data."""
 
-    def __init__(self, hass: HomeAssistant, client: OceaApiClient) -> None:
+    def __init__(
+        self,
+        hass: HomeAssistant,
+        client: OceaApiClient,
+        config_entry: ConfigEntry,
+    ) -> None:
         """Initialize the coordinator."""
         super().__init__(
             hass,
             _LOGGER,
             name=DOMAIN,
+            config_entry=config_entry,
             update_interval=timedelta(seconds=DEFAULT_SCAN_INTERVAL),
         )
         self.client = client
@@ -93,7 +100,10 @@ class OceaDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self, payload: dict[str, str]
     ) -> dict[str, dict[str, Any]]:
         """Fetch current-month consumption for each discovered meter."""
-        meter_data: dict[str, dict[str, Any]] = {}
+        meter_data = {
+            pds_id: {**metadata, "value": None, "date": ""}
+            for pds_id, metadata in self._meter_metadata.items()
+        }
         for pds_id, metadata in self._meter_metadata.items():
             try:
                 response = await self.hass.async_add_executor_job(

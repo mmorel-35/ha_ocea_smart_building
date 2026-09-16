@@ -11,6 +11,8 @@ Home Assistant integration to monitor water and heating consumption from the [Oc
 - **Cold water** consumption in m³
 - **Hot water** consumption in m³
 - **CETC heating** consumption in kWh when available for the dwelling
+- Individual water-meter consumption when the Ocea account exposes several PDS
+  (points of measurement)
 - Compatible with the **Energy dashboard** (water and energy sections)
 - Automatic Azure AD B2C authentication (no headless browser needed)
 - Automatic token refresh
@@ -43,6 +45,26 @@ Settings → Devices & Services → Add Integration → "Ocea Smart Building"
 
 Your dwelling is automatically detected from your Ocea account.
 
+### Water meters
+
+Ocea exposes two levels of consumption data:
+
+- the standard cold- and hot-water sensors are totals for the dwelling;
+- individual meter sensors are created for each cold- or hot-water PDS.
+
+Individual sensors use the PDS identifier as their stable Home Assistant
+identity. When Ocea provides a serial number, it is shown in the sensor and
+device name alongside the PDS identifier. This keeps sensors distinguishable
+when several meters measure the same fluid.
+
+The integration discovers the available PDS and meter serial numbers during
+setup, then refreshes each meter's consumption for the current calendar month.
+If one meter is temporarily unavailable, its entity remains present but has no
+state until a later refresh succeeds; other meters and dwelling totals continue
+to update. The discovery list is cached while the integration is loaded. Reload
+the integration after a meter is replaced, added, or removed in the Ocea portal
+so Home Assistant can synchronize the meter entities.
+
 ### Reconfiguration
 
 Open Settings → Devices & Services → Ocea Smart Building, then select the native **Reconfigure** action.
@@ -55,6 +77,10 @@ Open Settings → Devices & Services → Ocea Smart Building, then select the na
 ## Energy dashboard
 
 Add the cold and hot water sensors in Settings → Dashboards → Energy → Water consumption. When available, the CETC heating sensor can also be added as an energy-consumption source.
+
+Individual water-meter sensors are useful for separate dashboards and
+comparisons. Use the dwelling-level sensors when you need the total reported by
+the Ocea resident portal.
 
 ## Troubleshooting
 
