@@ -292,7 +292,11 @@ def test_meter_sensor_uses_pds_id_and_serial_for_identity() -> None:
         description=description,
         local_id="local-123",
         meter=OceaMeter.from_api(
-            {"id": "pds-cold-1", "fluide": "EauFroide"},
+            {
+                "id": "pds-cold-1",
+                "fluide": "EauFroide",
+                "emplacement": "Cuisine",
+            },
             {"pdsId": "pds-cold-1", "numeroSerie": "SERIAL-1"},
         ),
     )
@@ -311,3 +315,4 @@ def test_meter_sensor_uses_pds_id_and_serial_for_identity() -> None:
     assert sensor.device_info["translation_placeholders"] == {
         "meter_identity": "SERIAL-1 (PDS pds-cold-1)"
     }
+    assert sensor.device_info["suggested_area"] == "Cuisine"

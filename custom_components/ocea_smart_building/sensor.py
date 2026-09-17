@@ -46,6 +46,7 @@ def _meter_device_info(local_id: str, meter: OceaMeter) -> DeviceInfo:
         identifiers={(DOMAIN, f"{local_id}_{meter.identifier}")},
         manufacturer="Ocea Smart Building",
         serial_number=meter.serial_number,
+        suggested_area=meter.pds.location,
         translation_key="meter",
         translation_placeholders={"meter_identity": meter.display_name},
     )
