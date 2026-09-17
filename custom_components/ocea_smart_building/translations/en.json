@@ -55,6 +55,11 @@
       "fuite": {
         "name": "Estimated leak"
       }
+    },
+    "binary_sensor": {
+      "fuite": {
+        "name": "Leak detected"
+      }
     }
   },
   "device": {

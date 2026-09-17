@@ -55,6 +55,11 @@
       "fuite": {
         "name": "Fuite estimée"
       }
+    },
+    "binary_sensor": {
+      "fuite": {
+        "name": "Fuite détectée"
+      }
     }
   },
   "device": {

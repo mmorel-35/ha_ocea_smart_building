@@ -13,6 +13,7 @@ Home Assistant integration to monitor water and heating consumption from the [Oc
 - **CETC heating** consumption in kWh when available for the dwelling
 - Individual water-meter consumption when the Ocea account exposes several PDS
   (points of measurement)
+- Leak detection for each individual water meter
 - Compatible with the **Energy dashboard** (water and energy sections)
 - Automatic Azure AD B2C authentication (no headless browser needed)
 - Automatic token refresh
@@ -63,6 +64,31 @@ latest leak estimate reported by Ocea; it is not created when Ocea provides no
 leak estimate. If Ocea starts reporting a leak after setup, the entity is added
 automatically during the next coordinator update; no integration reload is
 needed.
+
+The integration also creates a `Fuite détectée` binary sensor for every
+individual water meter. It is `off` when Ocea reports an estimated leak of
+`0`, and `on` when the estimate is greater than `0`. If Ocea does not provide
+an estimate, the binary sensor is temporarily unavailable rather than being
+treated as `off`.
+
+Use this binary sensor in automations, for example:
+
+```yaml
+alias: Alerte fuite d'eau Ocea
+trigger:
+  - platform: state
+    entity_id: binary_sensor.ocea_smart_building_compteur_cuisine_fuite_detectee
+    from: "off"
+    to: "on"
+action:
+  - service: notify.mobile_app_telephone
+    data:
+      title: Fuite d'eau détectée
+      message: Le compteur Ocea signale une fuite estimée.
+```
+
+The integration polls Ocea every five hours. Leak detection therefore follows
+that refresh interval and is not real-time.
 
 The integration discovers the available PDS and meter serial numbers during
 setup, then refreshes each meter's consumption for the current calendar month.
