@@ -11,7 +11,11 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 from custom_components.ocea_smart_building.binary_sensor import OceaLeakBinarySensor
 from custom_components.ocea_smart_building.const import DOMAIN
 from custom_components.ocea_smart_building.coordinator import OceaDataUpdateCoordinator
-from custom_components.ocea_smart_building.models import OceaMeter, OceaMeterReading
+from custom_components.ocea_smart_building.models import (
+    OceaData,
+    OceaMeter,
+    OceaMeterReading,
+)
 
 
 def _sensor(
@@ -26,16 +30,17 @@ def _sensor(
         {"id": "pds-cold-1", "fluide": "EauFroide"},
         {"pdsId": "pds-cold-1", "numeroSerie": "SERIAL-1"},
     )
-    coordinator.data = {
-        "meters": {
+    coordinator.data = OceaData(
+        totals={},
+        meters={
             meter.identifier: OceaMeterReading(
                 meter=meter,
                 value=1.0,
                 latest_date="2026-09-15",
                 estimated_leak=estimated_leak,
             )
-        }
-    }
+        },
+    )
     return OceaLeakBinarySensor(coordinator, "local-123", meter)
 
 

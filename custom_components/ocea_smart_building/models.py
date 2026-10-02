@@ -80,3 +80,11 @@ class OceaMeterReading:
     estimated_leak: float | None = None
     consent: bool | None = None
     response_type: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class OceaData:
+    """Coordinator payload: dwelling totals and per-meter readings."""
+
+    totals: dict[str, float]
+    meters: dict[str, OceaMeterReading]

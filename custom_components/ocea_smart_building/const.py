@@ -35,3 +35,9 @@ PASSWORD_NOT_CHANGED = "__**password_not_changed**__"
 
 # Defaults
 DEFAULT_SCAN_INTERVAL = 18000  # 5 hours
+
+# Maps an Ocea fluid code to its dwelling-level sensor key.
+WATER_FLUID_SENSOR_KEYS: dict[str, str] = {
+    "EauFroide": "eau_froide",
+    "EauChaude": "eau_chaude",
+}

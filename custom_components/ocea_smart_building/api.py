@@ -8,6 +8,7 @@ import json
 import logging
 import re
 import secrets
+from typing import Any
 from urllib.parse import parse_qs, urlparse
 
 import requests
@@ -314,7 +315,7 @@ class OceaApiClient:
         path: str,
         payload: dict[str, object],
         retry_auth: bool = True,
-    ) -> any:
+    ) -> Any:
         """Make an authenticated JSON POST request to the Ocea API."""
         if not self._access_token:
             self.authenticate()

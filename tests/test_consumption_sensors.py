@@ -11,18 +11,19 @@ import pytest
 from homeassistant.components.sensor import SensorDeviceClass, SensorStateClass
 from homeassistant.const import UnitOfEnergy, UnitOfVolume
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.typing import UNDEFINED
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
-from custom_components.ocea_smart_building.api import OceaApiError
+from custom_components.ocea_smart_building.api import OceaApiError, OceaAuthError
 from custom_components.ocea_smart_building.const import DOMAIN
-from custom_components.ocea_smart_building.coordinator import OceaDataUpdateCoordinator
-from custom_components.ocea_smart_building.models import OceaMeter
-from custom_components.ocea_smart_building.sensor import SENSOR_TYPES, OceaMeterSensor
-from custom_components.ocea_smart_building.water_meter_service import (
+from custom_components.ocea_smart_building.coordinator import (
+    OceaDataUpdateCoordinator,
     _build_meter_data,
     _current_month_payload,
 )
+from custom_components.ocea_smart_building.models import OceaMeter
+from custom_components.ocea_smart_building.sensor import SENSOR_TYPES, OceaMeterSensor
 
 
 def _coordinator(hass: HomeAssistant, client: Mock) -> OceaDataUpdateCoordinator:
@@ -109,6 +110,7 @@ async def test_coordinator_uses_home_assistant_timezone(
         "custom_components.ocea_smart_building.coordinator.dt_util.now",
         return_value=datetime(2026, 9, 16, tzinfo=ZoneInfo("America/Montreal")),
     ):
+        await coordinator._async_setup()
         await coordinator._async_update_data()
 
     payload = client.get_pds_consumption.call_args.args[1]
@@ -127,13 +129,15 @@ async def test_coordinator_normalizes_cetc_consumption(hass: HomeAssistant) -> N
     client.get_appareils.return_value = []
     coordinator = _coordinator(hass, client)
 
+    await coordinator._async_setup()
     data = await coordinator._async_update_data()
 
-    assert data == {
+    assert data.totals == {
         "eau_froide": 12.34,
         "eau_chaude": 5.67,
         "cetc": 89.01,
     }
+    assert data.meters == {}
 
 
 async def test_coordinator_keeps_consumption_separate_per_pds(
@@ -158,15 +162,16 @@ async def test_coordinator_keeps_consumption_separate_per_pds(
     ]
     coordinator = _coordinator(hass, client)
 
+    await coordinator._async_setup()
     data = await coordinator._async_update_data()
 
-    assert data["eau_froide"] == 1.14
-    assert data["meters"]["pds-cold-1"].meter.pds.location == "Cuisine"
-    assert data["meters"]["pds-cold-1"].meter.serial_number == "SERIAL-1"
-    assert data["meters"]["pds-cold-1"].value == 0.321
-    assert data["meters"]["pds-cold-2"].meter.pds.location == "Salle de bain"
-    assert data["meters"]["pds-cold-2"].meter.serial_number == "SERIAL-2"
-    assert data["meters"]["pds-cold-2"].value == 0.654
+    assert data.totals["eau_froide"] == 1.14
+    assert data.meters["pds-cold-1"].meter.pds.location == "Cuisine"
+    assert data.meters["pds-cold-1"].meter.serial_number == "SERIAL-1"
+    assert data.meters["pds-cold-1"].value == 0.321
+    assert data.meters["pds-cold-2"].meter.pds.location == "Salle de bain"
+    assert data.meters["pds-cold-2"].meter.serial_number == "SERIAL-2"
+    assert data.meters["pds-cold-2"].value == 0.654
 
 
 def test_meter_data_builder_keeps_latest_leak_estimate() -> None:
@@ -222,6 +227,7 @@ async def test_coordinator_discovers_meters_only_once(
     }
     coordinator = _coordinator(hass, client)
 
+    await coordinator._async_setup()
     await coordinator._async_update_data()
     await coordinator._async_update_data()
 
@@ -249,11 +255,12 @@ async def test_coordinator_keeps_other_meters_when_one_fails(
     ]
     coordinator = _coordinator(hass, client)
 
+    await coordinator._async_setup()
     data = await coordinator._async_update_data()
 
-    assert data["eau_froide"] == 1.14
-    assert set(data["meters"]) == {"pds-cold-1", "pds-cold-2"}
-    assert data["meters"]["pds-cold-2"].value is None
+    assert data.totals["eau_froide"] == 1.14
+    assert set(data.meters) == {"pds-cold-1", "pds-cold-2"}
+    assert data.meters["pds-cold-2"].value is None
 
 
 async def test_coordinator_does_not_log_meter_details(
@@ -273,6 +280,7 @@ async def test_coordinator_does_not_log_meter_details(
     coordinator = _coordinator(hass, client)
 
     with caplog.at_level(logging.DEBUG):
+        await coordinator._async_setup()
         await coordinator._async_update_data()
 
     assert "pds-secret" not in caplog.text
@@ -316,3 +324,15 @@ def test_meter_sensor_uses_pds_id_and_serial_for_identity() -> None:
         "meter_identity": "SERIAL-1 (PDS pds-cold-1)"
     }
     assert sensor.device_info["suggested_area"] == "Cuisine"
+
+
+async def test_coordinator_setup_maps_auth_error_to_reauth(
+    hass: HomeAssistant,
+) -> None:
+    """Test a rejected discovery requests reauthentication."""
+    client = Mock()
+    client.get_pds.side_effect = OceaAuthError("rejected")
+    coordinator = _coordinator(hass, client)
+
+    with pytest.raises(ConfigEntryAuthFailed):
+        await coordinator._async_setup()
