@@ -11,6 +11,8 @@ Home Assistant integration to monitor water and heating consumption from the [Oc
 - **Cold water** consumption in m³
 - **Hot water** consumption in m³
 - **CETC heating** consumption in kWh when available for the dwelling
+- Consumption sensors for each physical meter and leak alerts
+- One-time import of available daily history into Home Assistant Recorder
 - Compatible with the **Energy dashboard** (water and energy sections)
 - Automatic Azure AD B2C authentication (no headless browser needed)
 - Automatic token refresh
@@ -32,6 +34,13 @@ Home Assistant integration to monitor water and heating consumption from the [Oc
 
 Copy `custom_components/ocea_smart_building/` into `config/custom_components/` and restart Home Assistant.
 
+## Async Python client
+
+The standalone `pyocea/` package provides the Ocea API client, typed response
+models, and exceptions without importing Home Assistant. The integration keeps
+an identical vendored copy inside its HACS directory so standard HACS installs
+remain self-contained. The client uses `aiohttp`.
+
 ## Configuration
 
 [![Open your Home Assistant instance and add the integration](https://my.home-assistant.io/badges/config_flow_start.svg)](https://my.home-assistant.io/redirect/config_flow_start/?domain=ocea_smart_building)
@@ -41,7 +50,8 @@ Settings → Devices & Services → Add Integration → "Ocea Smart Building"
 - **Email**: your Ocea resident portal email
 - **Password**: your Ocea password
 
-Your dwelling is automatically detected from your Ocea account.
+Your accessible dwelling is detected from your Ocea account. If the account has
+more than one, select the one to associate with this integration instance.
 
 ### Reconfiguration
 

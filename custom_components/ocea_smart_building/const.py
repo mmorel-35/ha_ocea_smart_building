@@ -1,7 +1,7 @@
 """Constants for the Ocea Smart Building integration."""
 
 DOMAIN = "ocea_smart_building"
-INTEGRATION_VERSION = "1.1.0"
+INTEGRATION_VERSION = "1.2.0"
 
 # Azure AD B2C
 B2C_TENANT = "osbespaceresident"
@@ -29,6 +29,7 @@ UA = (
 
 # Config keys
 CONF_LOCAL_ID = "local_id"
+CONF_DWELLING_ID = "dwelling_id"
 
 # Sentinel used to avoid exposing the stored password in config flow forms
 PASSWORD_NOT_CHANGED = "__**password_not_changed**__"

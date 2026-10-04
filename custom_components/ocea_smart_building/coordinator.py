@@ -1,60 +1,63 @@
-"""DataUpdateCoordinator for Ocea Smart Building."""
+"""Data update coordinator for Ocea Smart Building."""
 
 from __future__ import annotations
 
 import logging
 from datetime import timedelta
 
+from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
-from .api import OceaApiClient, OceaApiError, OceaAuthError
 from .const import DEFAULT_SCAN_INTERVAL, DOMAIN
+from .pyocea import OccupancyData, OceaAPIError, OceaAuthError, OceaClient
 
 _LOGGER = logging.getLogger(__name__)
 
 
-class OceaDataUpdateCoordinator(DataUpdateCoordinator[dict[str, float]]):
-    """Manage fetching Ocea consumption data."""
+class OceaDataUpdateCoordinator(DataUpdateCoordinator[OccupancyData]):
+    """Fetch one configured dwelling and manage its authentication lifecycle."""
 
-    def __init__(self, hass: HomeAssistant, client: OceaApiClient) -> None:
+    def __init__(
+        self,
+        hass: HomeAssistant,
+        entry: ConfigEntry,
+        client: OceaClient,
+        dwelling_id: str,
+    ) -> None:
         """Initialize the coordinator."""
         super().__init__(
             hass,
             _LOGGER,
+            config_entry=entry,
             name=DOMAIN,
             update_interval=timedelta(seconds=DEFAULT_SCAN_INTERVAL),
         )
         self.client = client
+        self.dwelling_id = dwelling_id
+        self._reauth_started = False
 
-    async def _async_update_data(self) -> dict[str, float]:
-        """Fetch data from Ocea API (runs sync client in executor)."""
-        _LOGGER.debug("Ocea coordinator: starting data fetch")
+    async def _async_update_data(self) -> OccupancyData:
+        """Fetch the configured dwelling asynchronously."""
         try:
-            raw_data = await self.hass.async_add_executor_job(
-                self.client.get_consumptions
-            )
+            data = await self.client.get_dwelling_data(self.dwelling_id)
         except OceaAuthError as err:
-            raise ConfigEntryAuthFailed(f"Authentication failed: {err}") from err
-        except OceaApiError as err:
-            raise UpdateFailed(f"Error fetching data: {err}") from err
-        except Exception as err:
-            raise UpdateFailed(f"Unexpected error: {err}") from err
+            await self._start_reauth()
+            raise ConfigEntryAuthFailed("Ocea authentication has expired") from err
+        except OceaAPIError as err:
+            if err.status_code in {401, 403}:
+                await self._start_reauth()
+                raise ConfigEntryAuthFailed(
+                    "Ocea no longer authorizes the configured dwelling"
+                ) from err
+            raise UpdateFailed("Unable to retrieve Ocea dwelling data") from err
+        self._reauth_started = False
+        return data
 
-        result: dict[str, float] = {}
-        for item in raw_data:
-            fluide = item.get("fluide", "")
-            valeur_str = item.get("valeur", "0")
-            # Ocea uses comma as decimal separator
-            valeur = float(valeur_str.replace(",", "."))
-
-            if fluide == "EauFroide":
-                result["eau_froide"] = valeur
-            elif fluide == "EauChaude":
-                result["eau_chaude"] = valeur
-            else:
-                result[fluide.lower()] = valeur
-
-        _LOGGER.debug("Ocea consumption data updated: %s", result)
-        return result
+    async def _start_reauth(self) -> None:
+        """Start Home Assistant's native reauthentication flow once per failure."""
+        if self._reauth_started:
+            return
+        self._reauth_started = True
+        self.config_entry.async_start_reauth(self.hass)

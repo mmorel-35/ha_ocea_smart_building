@@ -9,6 +9,13 @@
           "password": "Mot de passe"
         }
       },
+      "dwelling": {
+        "title": "Choisir un logement",
+        "description": "Sélectionnez le logement à associer à cette instance.",
+        "data": {
+          "dwelling_id": "Logement"
+        }
+      },
       "reauth_confirm": {
         "title": "Ré-authentification Ocea",
         "description": "Vos identifiants ont expiré, veuillez vous reconnecter.",
@@ -33,7 +40,7 @@
     "error": {
       "invalid_auth": "Identifiants invalides",
       "cannot_connect": "Impossible de se connecter au serveur Ocea",
-      "no_occupation": "Aucun logement trouvé pour ce compte",
+      "no_occupation": "Aucun logement accessible trouvé pour ce compte",
       "unknown": "Erreur inattendue"
     },
     "abort": {
@@ -51,6 +58,17 @@
       },
       "cetc": {
         "name": "Chauffage thermique"
+      },
+      "fuite_estimee": {
+        "name": "Volume de fuite estimé"
+      },
+      "meter_consumption": {
+        "name": "Consommation"
+      }
+    },
+    "binary_sensor": {
+      "fuite": {
+        "name": "Fuite détectée"
       }
     }
   }

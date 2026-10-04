@@ -9,6 +9,13 @@
           "password": "Password"
         }
       },
+      "dwelling": {
+        "title": "Choose a dwelling",
+        "description": "Select the dwelling to associate with this integration instance.",
+        "data": {
+          "dwelling_id": "Dwelling"
+        }
+      },
       "reauth_confirm": {
         "title": "Re-authentication",
         "description": "Your credentials have expired. Please reconnect.",
@@ -33,7 +40,7 @@
     "error": {
       "invalid_auth": "Invalid credentials",
       "cannot_connect": "Cannot connect to Ocea server",
-      "no_occupation": "No dwelling found for this account",
+      "no_occupation": "No accessible dwelling was found for this account",
       "unknown": "Unexpected error"
     },
     "abort": {
@@ -51,6 +58,17 @@
       },
       "cetc": {
         "name": "Thermal heating"
+      },
+      "fuite_estimee": {
+        "name": "Estimated leak volume"
+      },
+      "meter_consumption": {
+        "name": "Consumption"
+      }
+    },
+    "binary_sensor": {
+      "fuite": {
+        "name": "Leak detected"
       }
     }
   }

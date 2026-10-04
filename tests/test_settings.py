@@ -29,8 +29,11 @@ def _assert_ci_quality_gate(workflow: str) -> None:
     assert "--with pytest-homeassistant-custom-component" in workflow
     assert "python -m pytest -q" in workflow
     assert 'uvx --from "ruff==0.16.1"' in workflow
-    assert "ruff check custom_components tests" in workflow
-    assert "python -m compileall -q custom_components tests ocea_cli.py" in workflow
+    assert "ruff check custom_components tests pyocea" in workflow
+    assert (
+        "python -m compileall -q custom_components tests ocea_cli.py pyocea"
+        in workflow
+    )
     assert "python3 -m json.tool" in workflow
     assert "custom_components/ocea_smart_building/manifest.json" in workflow
     assert "custom_components/ocea_smart_building/strings.json" in workflow
