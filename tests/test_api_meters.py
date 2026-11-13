@@ -17,7 +17,12 @@ pytestmark = pytest.mark.usefixtures("local_http_only")
     [
         ("pds", "/api/v1/local/local-123/pds", None, [{"id": "pds-1"}]),
         ("appareils", "/api/v1/local/appareils", {"pdsIds": ["pds-1"]}, []),
-        ("consumption", "/api/v1/local/local-123/pds/pds-1/conso", {"granularity": "Day"}, {}),
+        (
+            "consumption",
+            "/api/v1/local/local-123/pds/pds-1/conso",
+            {"debut": "2026-01-01", "fin": "2026-01-31", "granularity": "Day"},
+            {"unite": "m3", "consommations": [{"date": "2026-01-01", "valeur": 0.1}]},
+        ),
     ],
 )
 async def test_meter_endpoints(aiohttp_server, monkeypatch, method, path, payload, result):

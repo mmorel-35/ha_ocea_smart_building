@@ -87,4 +87,5 @@ rules:
     status: exempt
     comment: The integration has no third-party runtime dependency; its HTTP client uses Home Assistant's aiohttp support.
   inject-websession: done
+  # API contracts and coordinator are typed; the integration as a whole is not yet strict.
   strict-typing: todo

@@ -60,7 +60,7 @@ C4Component
     Component(entrySetup, "Entry lifecycle", "__init__.py", "Creates entry-scoped client resources and loads or unloads platforms")
     Component(coordinator, "Data update coordinator", "coordinator.py", "Discovers meters, polls Ocea, and normalizes typed readings")
     Component(entities, "Entity platforms", "sensor.py, binary_sensor.py, entity.py", "Expose dwelling totals, meter readings, and leak estimates")
-    Component(apiClient, "Ocea API client and models", "ocea/client.py, ocea/models.py", "Makes asynchronous API requests and validates response shapes")
+    Component(apiClient, "Ocea API client and models", "ocea/client.py, ocea/models.py, ocea/types.py", "Makes asynchronous API requests and validates response shapes")
     Component(authentication, "B2C authentication", "ocea/auth.py", "Performs browser-compatible authorization, PKCE, and token refresh")
   }
 
@@ -130,6 +130,10 @@ in `test_config_flow.py` and `test_setup.py`; coordinator and sensor behavior in
   `OceaApiClient` and `OceaAuthentication` use it but do not close it. Config
   flows use their own isolated sessions so cookies are not shared across
   accounts or flow attempts.
+- `ocea/types.py` defines request and response contracts for the endpoints in
+  use. The client validates known fields, including nested fields, before
+  returning them; unknown fields are preserved for forward compatibility.
+  Occupation dates and meter installation dates describe different events.
 - Preserve the browser-compatible B2C flow, including cookie handling, PKCE,
   redirect parsing, and the User-Agent prefix. Authentication changes require
   focused client tests.

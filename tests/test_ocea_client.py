@@ -259,6 +259,89 @@ async def test_invalid_list_response(aiohttp_server, monkeypatch):
             await client.get_pds()
 
 
+@pytest.mark.parametrize(
+    ("method", "response"),
+    [
+        ("resident", {"resident": [], "occupations": []}),
+        ("resident", {"resident": {}, "occupations": [{"logementId": 1}]}),
+        ("resident", {"occupations": [{"dateDebut": False}]}),
+        ("dashboard", [{"fluide": "EauFroide", "valeur": 1}]),
+        ("pds", [{"id": "pds-1", "fce": True}]),
+        ("devices", [{"pdsId": "pds-1", "datePose": 1}]),
+        ("consumption", {"consommations": {}}),
+        ("consumption", {"consommations": [{"valeur": True}]}),
+        ("consumption", {"consommations": [{"consentement": "true"}]}),
+        ("consumption", {"consommations": [{"isEstimated": 1}]}),
+        ("consumption", {"unite": []}),
+    ],
+)
+async def test_nested_api_response_types_are_validated(
+    aiohttp_server, monkeypatch, method, response
+):
+    """Malformed known fields fail at the API boundary without leaking values."""
+    state = {"api_response": response}
+    await _server(aiohttp_server, monkeypatch, state)
+    async with aiohttp.ClientSession() as session:
+        client = _client(session)
+        client._auth._access_token = "token-placeholder"
+        with pytest.raises(OceaApiError, match="Invalid API"):
+            if method == "resident":
+                await client.get_resident()
+            elif method == "dashboard":
+                await client.get_consumptions()
+            elif method == "pds":
+                await client.get_pds()
+            elif method == "devices":
+                await client.get_appareils(["pds-1"])
+            else:
+                await client.get_pds_consumption(
+                    "pds-1",
+                    {"debut": "2026-01-01", "fin": "2026-01-31", "granularity": "Day"},
+                )
+
+
+async def test_consumption_response_preserves_optional_and_unknown_fields(
+    aiohttp_server, monkeypatch
+):
+    """Validated responses keep all data, including future API fields."""
+    response = {
+        "unite": "m3",
+        "other": {"additional": "metadata"},
+        "consommations": [
+            {
+                "date": "2026-01-01",
+                "valeur": "0,125",
+                "fuiteEstimee": None,
+                "consentement": None,
+                "isEstimated": False,
+                "newField": "retained",
+            }
+        ],
+    }
+    state = {"api_response": response}
+    await _server(aiohttp_server, monkeypatch, state)
+    async with aiohttp.ClientSession() as session:
+        client = _client(session)
+        client._auth._access_token = "token-placeholder"
+        result = await client.get_pds_consumption(
+            "pds-1",
+            {"debut": "2026-01-01", "fin": "2026-01-31", "granularity": "Day"},
+        )
+    assert result == response
+
+
+async def test_invalid_field_does_not_expose_value(aiohttp_server, monkeypatch):
+    """Validation errors identify the field, never the received value."""
+    state = {"api_response": {"resident": {"prenom": ["private-placeholder"]}}}
+    await _server(aiohttp_server, monkeypatch, state)
+    async with aiohttp.ClientSession() as session:
+        client = _client(session)
+        client._auth._access_token = "token-placeholder"
+        with pytest.raises(OceaApiError, match="prenom") as error:
+            await client.get_resident()
+    assert "private-placeholder" not in str(error.value)
+
+
 async def test_authentication_cookies_are_isolated_between_sessions(aiohttp_server, monkeypatch):
     """Each independently injected session keeps its own B2C cookies."""
     state = {"cookies": ["first-placeholder", "second-placeholder"]}

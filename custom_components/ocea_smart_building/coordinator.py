@@ -6,7 +6,6 @@ import logging
 from dataclasses import dataclass
 from datetime import date, timedelta
 from decimal import Decimal, InvalidOperation
-from typing import Any
 
 from aiohttp import ClientError
 from homeassistant.config_entries import ConfigEntry
@@ -17,6 +16,12 @@ from homeassistant.util import dt as dt_util
 
 from .const import DEFAULT_SCAN_INTERVAL, DOMAIN, WATER_FLUID_SENSOR_KEYS
 from .ocea import OceaApiClient, OceaApiError, OceaAuthError, OceaMeter
+from .ocea.types import (
+    OceaConsumptionItem,
+    OceaConsumptionRequest,
+    OceaConsumptionResponse,
+    OceaDashboardConsumption,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -43,7 +48,7 @@ class OceaData:
 _LOGGER = logging.getLogger(__name__)
 
 
-def _current_month_payload(today: date) -> dict[str, str]:
+def _current_month_payload(today: date) -> OceaConsumptionRequest:
     """Build the daily consumption request for the current local month."""
     return {
         "debut": f"{today.replace(day=1).isoformat()}T00:00:00.000Z",
@@ -52,7 +57,7 @@ def _current_month_payload(today: date) -> dict[str, str]:
     }
 
 
-def _build_meter_data(meter: OceaMeter, response: dict[str, Any]) -> OceaMeterReading:
+def _build_meter_data(meter: OceaMeter, response: OceaConsumptionResponse) -> OceaMeterReading:
     """Aggregate one PDS response while preserving its metadata."""
     if not isinstance(response, dict):
         raise OceaApiError("Invalid meter consumption response")
@@ -63,7 +68,7 @@ def _build_meter_data(meter: OceaMeter, response: dict[str, Any]) -> OceaMeterRe
 
     total = Decimal(0)
     latest_date: str | None = None
-    latest_item: dict[str, Any] | None = None
+    latest_item: OceaConsumptionItem | None = None
     for item in consumptions:
         if not isinstance(item, dict):
             raise OceaApiError("Invalid meter consumption item")
@@ -174,7 +179,7 @@ class OceaDataUpdateCoordinator(DataUpdateCoordinator[OceaData]):
             for item in pds_data
         }
 
-    async def _fetch_readings(self, payload: dict[str, str]) -> dict[str, OceaMeterReading]:
+    async def _fetch_readings(self, payload: OceaConsumptionRequest) -> dict[str, OceaMeterReading]:
         """Fetch current-month consumption for each meter."""
         readings = {
             pds_id: OceaMeterReading(meter=meter, value=None, latest_date=None)
@@ -182,7 +187,7 @@ class OceaDataUpdateCoordinator(DataUpdateCoordinator[OceaData]):
         }
         for pds_id, meter in self._meters.items():
             try:
-                response = await self.client.get_pds_consumption(pds_id, dict(payload))
+                response = await self.client.get_pds_consumption(pds_id, payload)
                 readings[pds_id] = _build_meter_data(meter, response)
             except OceaAuthError:
                 raise
@@ -191,7 +196,7 @@ class OceaDataUpdateCoordinator(DataUpdateCoordinator[OceaData]):
         return readings
 
     @staticmethod
-    def _aggregate_totals(raw_data: list[dict[str, str]]) -> dict[str, float]:
+    def _aggregate_totals(raw_data: list[OceaDashboardConsumption]) -> dict[str, float]:
         """Map the dwelling's dashboard consumption entries to sensor keys."""
         totals: dict[str, float] = {}
         for item in raw_data:
