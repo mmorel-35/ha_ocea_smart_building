@@ -51,7 +51,7 @@ def config_entry(hass: HomeAssistant) -> MockConfigEntry:
     return entry
 
 
-@pytest.mark.usefixtures("enable_custom_integrations")
+@pytest.mark.usefixtures("enable_custom_integrations", "real_recorder")
 async def test_user_flow_recovers_from_auth_error(hass: HomeAssistant) -> None:
     """A user can retry credentials and each attempt releases its own session."""
     with (
@@ -79,7 +79,7 @@ async def test_user_flow_recovers_from_auth_error(hass: HomeAssistant) -> None:
     assert all(session.closed for session in sessions)
 
 
-@pytest.mark.usefixtures("enable_custom_integrations")
+@pytest.mark.usefixtures("enable_custom_integrations", "real_recorder")
 async def test_user_flow_does_not_log_exception_details(
     hass: HomeAssistant, caplog: pytest.LogCaptureFixture
 ) -> None:
@@ -99,7 +99,7 @@ async def test_user_flow_does_not_log_exception_details(
     assert client_class.call_args.kwargs["session"].closed
 
 
-@pytest.mark.usefixtures("enable_custom_integrations")
+@pytest.mark.usefixtures("enable_custom_integrations", "real_recorder")
 async def test_reauth_recovers_from_auth_error(
     hass: HomeAssistant, config_entry: MockConfigEntry
 ) -> None:
@@ -144,7 +144,7 @@ async def _async_init_reconfigure(
     )
 
 
-@pytest.mark.usefixtures("enable_custom_integrations")
+@pytest.mark.usefixtures("enable_custom_integrations", "real_recorder")
 async def test_reconfigure_form_shows_existing_values_without_password(
     hass: HomeAssistant, config_entry: MockConfigEntry
 ) -> None:
@@ -163,7 +163,7 @@ async def test_reconfigure_form_shows_existing_values_without_password(
     assert OLD_PASSWORD not in repr(result["data_schema"])
 
 
-@pytest.mark.usefixtures("enable_custom_integrations")
+@pytest.mark.usefixtures("enable_custom_integrations", "real_recorder")
 async def test_successful_reconfiguration(
     hass: HomeAssistant, config_entry: MockConfigEntry
 ) -> None:
@@ -213,7 +213,7 @@ async def test_successful_reconfiguration(
         (RuntimeError("unexpected"), "unknown"),
     ],
 )
-@pytest.mark.usefixtures("enable_custom_integrations")
+@pytest.mark.usefixtures("enable_custom_integrations", "real_recorder")
 async def test_reconfigure_validation_error(
     hass: HomeAssistant,
     config_entry: MockConfigEntry,
@@ -241,7 +241,7 @@ async def test_reconfigure_validation_error(
     assert client_class.call_args.kwargs["session"].closed
 
 
-@pytest.mark.usefixtures("enable_custom_integrations")
+@pytest.mark.usefixtures("enable_custom_integrations", "real_recorder")
 async def test_reconfigure_preserves_secrets(
     hass: HomeAssistant, config_entry: MockConfigEntry
 ) -> None:
@@ -276,7 +276,7 @@ async def test_reconfigure_preserves_secrets(
     )
 
 
-@pytest.mark.usefixtures("enable_custom_integrations")
+@pytest.mark.usefixtures("enable_custom_integrations", "real_recorder")
 async def test_reconfigure_without_changes_does_not_reload(
     hass: HomeAssistant, config_entry: MockConfigEntry
 ) -> None:

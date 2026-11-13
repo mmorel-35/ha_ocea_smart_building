@@ -13,6 +13,7 @@ Home Assistant integration to monitor water and heating consumption from the [Oc
 - **CETC heating** consumption in kWh when available for the dwelling
 - Individual water-meter consumption when the Ocea account exposes several PDS
   (points of measurement)
+- Dated daily consumption history as external statistics for each water PDS
 - Leak detection for each individual water meter
 - Compatible with the **Energy dashboard** (water and energy sections)
 - Automatic Azure AD B2C authentication (no headless browser needed)
@@ -121,6 +122,42 @@ comparisons. Use the dwelling-level sensors when you need the total reported by
 the Ocea resident portal. Do not add both dwelling totals and their individual
 meters to the same Energy Dashboard water configuration, or the same water
 consumption will be counted twice.
+
+### Dated water consumption history
+
+Each water PDS also has an external statistic named `Ocea` followed by its fluid
+and meter identifier. Select these statistics under **Water consumption** to
+show the dates reported by Ocea instead of the times Home Assistant polled the
+API. Replace the existing water sources rather than adding the new statistics
+alongside the corresponding dwelling or meter sensors: they measure the same
+consumption. Existing sensors, automations, and Recorder statistics are left
+unchanged. Existing Energy Dashboard configurations must be updated manually.
+
+The integration fetches up to 30 days of older daily readings per PDS at each
+five-hour refresh. Manual refreshes and restarts do not bypass this per-meter
+request limit. Recent readings are available while older periods fill in,
+and the process resumes after a restart. Corrections in the current month are
+refreshed; during the first week of a month, the preceding days are also
+rechecked once the backfill has caught up. The integration does not estimate
+missing readings, although Ocea may supply estimated values itself; unavailable
+history can leave gaps. Recorder and the Energy Dashboard are required to display
+the external statistics.
+
+The first imported day is the later of the resident's occupation start and the
+installation date reported for the current meter. If either date is missing or
+ambiguous, that history is not imported until Ocea supplies it. A replaced
+meter may have earlier PDS history that predates its current installation date;
+this integration does not import that earlier period. The source samples do not
+specify a timezone for daily dates, so the integration interprets them as
+calendar days in Home Assistant's configured timezone. A daily total is assigned
+to one hour on that day for Recorder; it is **not** an hourly measurement.
+Changing Home Assistant's timezone or the configured account creates new
+external statistics which must be selected again in the Energy Dashboard.
+
+Cached daily readings and backfill progress are stored privately in Home
+Assistant and removed when the integration entry is deleted. Existing Recorder
+statistics are not automatically deleted. Reinstallation or loss of this cache
+creates new external statistics, which must be selected again.
 
 ## Troubleshooting
 

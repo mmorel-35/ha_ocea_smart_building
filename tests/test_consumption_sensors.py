@@ -89,6 +89,16 @@ def test_meter_data_builder_aggregates_one_meter_response() -> None:
     ).latest_date == "2026-09-15"
 
 
+def test_missing_daily_value_does_not_create_history_zero() -> None:
+    """Keep the live aggregate but don't invent a dated zero for history."""
+    meter = OceaMeter.from_api({"id": "pds-1", "fluide": "EauFroide"}, None)
+    reading = _build_meter_data(
+        meter, {"consommations": [{"date": "2026-09-15"}]}
+    )
+    assert reading.value == 0
+    assert reading.daily_consumptions is None
+
+
 def test_current_month_payload_uses_requested_calendar_date() -> None:
     """Test the API payload represents the local calendar month."""
     assert _current_month_payload(date(2026, 9, 16)) == {

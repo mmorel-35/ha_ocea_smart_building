@@ -11,6 +11,7 @@ from homeassistant.helpers.aiohttp_client import async_create_clientsession
 
 from .const import CONF_LOCAL_ID, DOMAIN, UA
 from .coordinator import OceaDataUpdateCoordinator
+from .history import OceaHistorySynchronizer, history_store
 from .ocea import OceaApiClient
 
 _LOGGER = logging.getLogger(__name__)
@@ -35,6 +36,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         hass.data.setdefault(DOMAIN, {})
         hass.data[DOMAIN][entry.entry_id] = coordinator
         await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+        history = OceaHistorySynchronizer(hass, entry, client, coordinator)
+        entry.async_on_unload(coordinator.async_add_listener(history.async_schedule))
+        history.async_schedule()
     except BaseException:
         hass.data.get(DOMAIN, {}).pop(entry.entry_id, None)
         session.detach()
@@ -48,3 +52,8 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     if unload_ok := await hass.config_entries.async_unload_platforms(entry, PLATFORMS):
         hass.data[DOMAIN].pop(entry.entry_id)
     return unload_ok
+
+
+async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Remove cached readings without deleting existing Recorder statistics."""
+    await history_store(hass, entry).async_remove()

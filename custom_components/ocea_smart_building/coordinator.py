@@ -4,9 +4,8 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from decimal import Decimal, InvalidOperation
-from typing import Any
 
 from aiohttp import ClientError
 from homeassistant.config_entries import ConfigEntry
@@ -20,6 +19,15 @@ from .ocea import OceaApiClient, OceaApiError, OceaAuthError, OceaMeter
 
 
 @dataclass(frozen=True, slots=True)
+class OceaDailyConsumption:
+    """One dated Ocea consumption value."""
+
+    day: date
+    value: Decimal
+    consent: bool | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class OceaMeterReading:
     """Current-month consumption for one Ocea meter."""
 
@@ -30,6 +38,7 @@ class OceaMeterReading:
     estimated_leak: float | None = None
     consent: bool | None = None
     response_type: str | None = None
+    daily_consumptions: tuple[OceaDailyConsumption, ...] | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -52,7 +61,7 @@ def _current_month_payload(today: date) -> dict[str, str]:
     }
 
 
-def _build_meter_data(meter: OceaMeter, response: dict[str, Any]) -> OceaMeterReading:
+def _build_meter_data(meter: OceaMeter, response: dict[str, object]) -> OceaMeterReading:
     """Aggregate one PDS response while preserving its metadata."""
     if not isinstance(response, dict):
         raise OceaApiError("Invalid meter consumption response")
@@ -63,10 +72,17 @@ def _build_meter_data(meter: OceaMeter, response: dict[str, Any]) -> OceaMeterRe
 
     total = Decimal(0)
     latest_date: str | None = None
-    latest_item: dict[str, Any] | None = None
-    for item in consumptions:
-        if not isinstance(item, dict):
+    latest_item: dict[str, object] | None = None
+    daily_consumptions: list[OceaDailyConsumption] = []
+    valid_daily_data = True
+    for raw_item in consumptions:
+        if not isinstance(raw_item, dict) or not all(
+            isinstance(key, str) for key in raw_item
+        ):
             raise OceaApiError("Invalid meter consumption item")
+        item: dict[str, object] = {
+            key: value for key, value in raw_item.items() if isinstance(key, str)
+        }
         try:
             value = Decimal(str(item.get("valeur", 0)).replace(",", "."))
         except (InvalidOperation, TypeError, ValueError) as err:
@@ -74,29 +90,59 @@ def _build_meter_data(meter: OceaMeter, response: dict[str, Any]) -> OceaMeterRe
         if not value.is_finite():
             raise OceaApiError("Invalid meter consumption value")
         total += value
-        item_date = str(item.get("date", ""))
+        raw_date = item.get("date", "")
+        item_date = str(raw_date)
+        consent = item.get("consentement")
+        if not isinstance(raw_date, str):
+            valid_daily_data = False
+        else:
+            try:
+                day = (
+                    date.fromisoformat(raw_date)
+                    if len(raw_date) == 10
+                    else datetime.fromisoformat(raw_date).date()
+                )
+            except ValueError:
+                valid_daily_data = False
+            else:
+                if "valeur" not in item or not isinstance(consent, (bool, type(None))):
+                    valid_daily_data = False
+                else:
+                    daily_consumptions.append(OceaDailyConsumption(day, value, consent))
         if latest_date is None or item_date >= latest_date:
             latest_date = item_date
             latest_item = item
     latest_item = latest_item or {}
     estimated_leak = latest_item.get("fuiteEstimee")
+    leak_value: float | None = None
     if estimated_leak is not None:
         try:
-            leak_value = Decimal(str(estimated_leak).replace(",", "."))
+            leak_decimal = Decimal(str(estimated_leak).replace(",", "."))
         except (InvalidOperation, TypeError, ValueError) as err:
             raise OceaApiError("Invalid estimated leak value") from err
-        if not leak_value.is_finite():
+        if not leak_decimal.is_finite():
             raise OceaApiError("Invalid estimated leak value")
-        estimated_leak = float(leak_value)
+        leak_value = float(leak_decimal)
+
+    unit = response.get("unite")
+    consent = latest_item.get("consentement")
+    response_type = latest_item.get("type")
+    if (
+        (unit is not None and not isinstance(unit, str))
+        or (consent is not None and not isinstance(consent, bool))
+        or (response_type is not None and not isinstance(response_type, str))
+    ):
+        raise OceaApiError("Invalid meter consumption metadata")
 
     return OceaMeterReading(
         meter=meter,
         value=float(total),
         latest_date=latest_date,
-        unit=response.get("unite"),
-        estimated_leak=estimated_leak,
-        consent=latest_item.get("consentement"),
-        response_type=latest_item.get("type"),
+        unit=unit,
+        estimated_leak=leak_value,
+        consent=consent,
+        response_type=response_type,
+        daily_consumptions=tuple(daily_consumptions) if valid_daily_data else None,
     )
 
 
@@ -145,10 +191,10 @@ class OceaDataUpdateCoordinator(DataUpdateCoordinator[OceaData]):
             raw_data = await self.client.get_consumptions()
             payload = _current_month_payload(dt_util.now().date())
             meters = await self._fetch_readings(payload)
+            data = OceaData(totals=self._aggregate_totals(raw_data), meters=meters)
         except Exception as err:
             raise _as_update_error(err) from err
 
-        data = OceaData(totals=self._aggregate_totals(raw_data), meters=meters)
         _LOGGER.debug(
             "Ocea consumption data updated: %d aggregate values, %d individual meters",
             len(data.totals),
@@ -191,12 +237,15 @@ class OceaDataUpdateCoordinator(DataUpdateCoordinator[OceaData]):
         return readings
 
     @staticmethod
-    def _aggregate_totals(raw_data: list[dict[str, str]]) -> dict[str, float]:
+    def _aggregate_totals(raw_data: list[dict[str, object]]) -> dict[str, float]:
         """Map the dwelling's dashboard consumption entries to sensor keys."""
         totals: dict[str, float] = {}
         for item in raw_data:
             fluide = item.get("fluide", "")
+            raw_value = item.get("valeur", "0")
+            if not isinstance(fluide, str) or not isinstance(raw_value, str):
+                raise OceaApiError("Invalid dwelling consumption response")
             # Ocea uses comma as decimal separator
-            valeur = float(item.get("valeur", "0").replace(",", "."))
+            valeur = float(raw_value.replace(",", "."))
             totals[WATER_FLUID_SENSOR_KEYS.get(fluide, fluide.lower())] = valeur
         return totals

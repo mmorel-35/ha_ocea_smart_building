@@ -59,6 +59,7 @@ C4Component
     Component(configFlow, "Config flow", "config_flow.py", "Validates credentials and manages setup, reauthentication, and reconfiguration")
     Component(entrySetup, "Entry lifecycle", "__init__.py", "Creates entry-scoped client resources and loads or unloads platforms")
     Component(coordinator, "Data update coordinator", "coordinator.py", "Discovers meters, polls Ocea, and normalizes typed readings")
+    Component(history, "History synchronizer", "history.py", "Backfills dated PDS consumption and publishes external Recorder statistics")
     Component(entities, "Entity platforms", "sensor.py, binary_sensor.py, entity.py", "Expose dwelling totals, meter readings, and leak estimates")
     Component(apiClient, "Ocea API client and models", "ocea/client.py, ocea/models.py", "Makes asynchronous API requests and validates response shapes")
     Component(authentication, "B2C authentication", "ocea/auth.py", "Performs browser-compatible authorization, PKCE, and token refresh")
@@ -73,6 +74,9 @@ C4Component
   Rel(entrySetup, homeAssistant, "Creates an entry-scoped HTTP session and forwards platforms")
   Rel(entrySetup, coordinator, "Initializes and stores")
   Rel(coordinator, apiClient, "Fetches dwelling and meter readings")
+  Rel(coordinator, history, "Schedules history synchronization")
+  Rel(history, apiClient, "Fetches bounded daily history")
+  Rel(history, homeAssistant, "Persists progress and publishes external statistics")
   Rel(apiClient, authentication, "Obtains or refreshes access tokens")
   Rel(authentication, b2c, "Runs the authorization-code flow", "HTTPS")
   Rel(apiClient, oceaApi, "Reads resident and consumption endpoints", "HTTPS/JSON")
@@ -103,6 +107,16 @@ Assistant. A meter-specific read failure does not discard successful readings
 from other meters or the dwelling totals; missing leak estimates remain
 unavailable rather than being reported as “no leak.”
 
+An entry-scoped background synchronizer reads the resident's occupation date
+and each current meter's installation date. It adds at most one 30-day history
+request per PDS per refresh, reuses the coordinator's current-month readings,
+and persists daily values and a per-meter cursor in a private Home Assistant
+store. It publishes recalculated cumulative external Recorder statistics by PDS;
+the existing sensor statistics are not rewritten. Earlier insertions or
+corrections recalculate subsequent cumulative sums. Dates without a source
+timezone are treated as Home Assistant local calendar days. Changing that
+timezone creates a separate statistic rather than mixing timestamps.
+
 ## Integration modules
 
 | Module | Responsibility |
@@ -110,6 +124,7 @@ unavailable rather than being reported as “no leak.”
 | `__init__.py` | Config-entry lifecycle: create the entry-scoped HTTP session and API client, perform the first coordinator refresh, forward platforms, and unload them. |
 | `config_flow.py` | Initial setup, reauthentication, and reconfiguration. Validate credentials with the client, derive the dwelling ID and title from resident data, and persist the validated config. |
 | `coordinator.py` | Discover PDS/meter metadata at startup; fetch and normalize dwelling totals and per-meter readings; expose a typed coordinator payload and translate API failures to Home Assistant update/auth errors. |
+| `history.py` | Validate occupation and meter boundaries; incrementally cache dated PDS readings and publish their external Recorder statistics. |
 | `entity.py` | Shared coordinator entity base, device metadata, and stable unique-ID construction for dwelling and meter entities. |
 | `sensor.py` | Dwelling-level and per-meter water/heating sensors, plus estimated-leak measurement sensors when Ocea provides estimates. |
 | `binary_sensor.py` | Per-meter leak state, derived from the latest estimated-leak value. Missing estimates are represented as unavailable, not as “no leak.” |
@@ -144,6 +159,9 @@ in `test_config_flow.py` and `test_setup.py`; coordinator and sensor behavior in
   integration to synchronize meter additions or removals.
 - Keep the polling interval at five hours unless a separately requested and
   tested behavior change says otherwise.
+- Keep imported PDS statistics separate from existing sensor statistics; do not
+  infer missing daily consumption or import before the current occupation or
+  current meter installation.
 
 When behavior or module ownership changes, update this document alongside the
 affected implementation and tests.
