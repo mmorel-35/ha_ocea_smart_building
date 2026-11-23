@@ -8,12 +8,22 @@ from dataclasses import dataclass, field
 from datetime import date, datetime, timezone
 from decimal import Decimal, InvalidOperation
 from enum import StrEnum
-from typing import Literal, NotRequired, TypedDict, TypeGuard, cast
+from typing import Literal, NotRequired, TypedDict, TypeGuard
 
 from .const import OCEA_TIME_ZONE
-from .exceptions import OCEAApiError
+from .exceptions import OCEAResponseError
 
 _LOGGER = logging.getLogger(__name__)
+
+
+def _is_object_mapping(value: object) -> TypeGuard[dict[str, object]]:
+    """Narrow a decoded JSON object without trusting its keys or values."""
+    return isinstance(value, dict) and all(isinstance(key, str) for key in value)
+
+
+def _is_object_list(value: object) -> TypeGuard[list[object]]:
+    """Narrow a decoded JSON array while keeping its items untrusted."""
+    return isinstance(value, list)
 
 
 class OCEADevicesRequest(TypedDict):
@@ -347,7 +357,7 @@ def _validate_fields(
             if not isinstance(value, allowed) or (
                 isinstance(value, bool) and bool not in allowed
             ):
-                raise OCEAApiError(f"Invalid API field: {key}")
+                raise OCEAResponseError(f"Invalid API field: {key}")
 
 
 def is_dashboard_consumption(data: dict[str, object]) -> TypeGuard[OCEADashboardConsumption]:
@@ -384,11 +394,11 @@ def is_consumption_response(data: dict[str, object]) -> TypeGuard[OCEAConsumptio
     _validate_fields(data, {"unite": (str, type(None))})
     if "consommations" in data:
         items = data["consommations"]
-        if not isinstance(items, list):
-            raise OCEAApiError("Invalid meter consumption list")
+        if not _is_object_list(items):
+            raise OCEAResponseError("Invalid meter consumption list")
         for item in items:
-            if not isinstance(item, dict):
-                raise OCEAApiError("Invalid meter consumption item")
+            if not _is_object_mapping(item):
+                raise OCEAResponseError("Invalid meter consumption item")
             _validate_fields(
                 item,
                 {
@@ -476,24 +486,22 @@ class OCEAResident:
     def from_api(cls, data: Mapping[str, object]) -> OCEAResident:
         """Validate resident and occupation shapes at the API boundary."""
         resident = data.get("resident", {})
-        if not isinstance(resident, dict):
-            raise OCEAApiError("Invalid resident response")
-        resident = cast(dict[str, object], resident)
+        if not _is_object_mapping(resident):
+            raise OCEAResponseError("Invalid resident response")
         name = resident.get("prenom", "")
         if not isinstance(name, str):
-            raise OCEAApiError("Invalid resident name")
+            raise OCEAResponseError("Invalid resident name")
         raw_occupations = data.get("occupations", [])
-        if not isinstance(raw_occupations, list):
-            raise OCEAApiError("Invalid occupations response")
+        if not _is_object_list(raw_occupations):
+            raise OCEAResponseError("Invalid occupations response")
         dwellings: dict[str, list[OCEAOccupation]] = {}
-        for raw in cast(list[object], raw_occupations):
-            if not isinstance(raw, dict):
-                raise OCEAApiError("Invalid occupation response")
-            occupation = cast(dict[str, object], raw)
-            local_id = occupation.get("logementId")
+        for raw in raw_occupations:
+            if not _is_object_mapping(raw):
+                raise OCEAResponseError("Invalid occupation response")
+            local_id = raw.get("logementId")
             if not isinstance(local_id, str) or not local_id.strip():
-                raise OCEAApiError("Invalid dwelling identifier")
-            dwellings.setdefault(local_id, []).append(OCEAOccupation.from_api(occupation))
+                raise OCEAResponseError("Invalid dwelling identifier")
+            dwellings.setdefault(local_id, []).append(OCEAOccupation.from_api(raw))
         return cls(
             name=name,
             dwellings=tuple(
@@ -519,7 +527,7 @@ class OCEAAddress:
         def field(key: str) -> str | None:
             value = data.get(key)
             if value is not None and not isinstance(value, (str, int)):
-                raise OCEAApiError("Invalid dwelling address field")
+                raise OCEAResponseError("Invalid dwelling address field")
             return str(value) if value is not None else None
 
         return cls(
@@ -541,14 +549,14 @@ class OCEADwellingDetails:
     def from_api(cls, data: Mapping[str, object]) -> OCEADwellingDetails:
         """Parse the available address from dwelling details."""
         local = data.get("local")
-        if not isinstance(local, dict):
-            raise OCEAApiError("Invalid dwelling details")
+        if not _is_object_mapping(local):
+            raise OCEAResponseError("Invalid dwelling details")
         address = local.get("adresse")
         if address is None:
             return cls(address=None)
-        if not isinstance(address, dict):
-            raise OCEAApiError("Invalid dwelling address")
-        return cls(address=OCEAAddress.from_api(cast(dict[str, object], address)))
+        if not _is_object_mapping(address):
+            raise OCEAResponseError("Invalid dwelling address")
+        return cls(address=OCEAAddress.from_api(address))
 
 
 @dataclass(frozen=True, slots=True)
@@ -561,27 +569,30 @@ class OCEADwellingFluids:
     def from_api(cls, data: Mapping[str, object]) -> OCEADwellingFluids:
         """Parse the advertised fluids without requiring address details."""
         fluids = data.get("fluidesRestitues")
-        if not isinstance(fluids, list):
-            raise OCEAApiError("Invalid dwelling fluids")
+        if not _is_object_list(fluids):
+            raise OCEAResponseError("Invalid dwelling fluids")
         result: list[str] = []
         for item in fluids:
-            if not isinstance(item, dict) or not isinstance(item.get("fluide"), str):
-                raise OCEAApiError("Invalid dwelling fluid")
-            result.append(item["fluide"])
+            if not _is_object_mapping(item):
+                raise OCEAResponseError("Invalid dwelling fluid")
+            fluid = item.get("fluide")
+            if not isinstance(fluid, str):
+                raise OCEAResponseError("Invalid dwelling fluid")
+            result.append(fluid)
         return cls(fluids=tuple(result))
 
 
 def _optional_string(data: Mapping[str, object], key: str) -> str | None:
     value = data.get(key)
     if value is not None and not isinstance(value, str):
-        raise OCEAApiError(f"Invalid meter field: {key}")
+        raise OCEAResponseError(f"Invalid meter field: {key}")
     return value
 
 
 def _optional_number(data: Mapping[str, object], key: str) -> float | None:
     value = data.get(key)
     if value is not None and (isinstance(value, bool) or not isinstance(value, (int, float))):
-        raise OCEAApiError(f"Invalid meter field: {key}")
+        raise OCEAResponseError(f"Invalid meter field: {key}")
     return value
 
 

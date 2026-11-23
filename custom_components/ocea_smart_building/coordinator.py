@@ -20,7 +20,14 @@ from .const import (
     DOMAIN,
     PDS_FLUID_METADATA,
 )
-from .ocea import OCEAApiClient, OCEAApiError, OCEAAuthError, OCEAMeter
+from .ocea import (
+    OCEAApiClient,
+    OCEAApiError,
+    OCEAAuthError,
+    OCEAConnectionError,
+    OCEAMeter,
+    OCEAResponseError,
+)
 from .ocea.const import OCEA_TIME_ZONE
 from .ocea.models import (
     OCEAConsumptionDataItem,
@@ -165,6 +172,10 @@ def _as_update_error(err: Exception) -> Exception:
     """Translate a client error into the matching coordinator exception."""
     if isinstance(err, OCEAAuthError):
         return ConfigEntryAuthFailed(f"Authentication failed: {err}")
+    if isinstance(err, OCEAConnectionError):
+        return UpdateFailed("Error connecting to OCEA")
+    if isinstance(err, OCEAResponseError):
+        return UpdateFailed(f"Invalid response from OCEA: {err}")
     if isinstance(err, OCEAApiError):
         return UpdateFailed(f"Error fetching data: {err}")
     if isinstance(err, (ClientError, TimeoutError)):

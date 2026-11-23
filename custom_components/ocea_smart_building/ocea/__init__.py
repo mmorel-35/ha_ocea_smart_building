@@ -1,15 +1,33 @@
 """OCEA resident API client and data models."""
 
 from .client import OCEAApiClient
-from .exceptions import OCEAApiError, OCEAAuthError
+from .exceptions import (
+    OCEAApiError,
+    OCEAAuthError,
+    OCEAConnectionError,
+    OCEAError,
+    OCEAResponseError,
+)
 from .models import (
     OccupationStatus,
     OCEAAddress,
+    OCEAConsumptionData,
+    OCEAConsumptionDataItem,
+    OCEAConsumptionRequest,
+    OCEAConsumptionSeries,
+    OCEADashboardData,
+    OCEADeviceData,
+    OCEADevicesRequest,
     OCEADwelling,
     OCEADwellingDetails,
+    OCEADwellingFluids,
+    OCEAGenericConsumptionData,
     OCEAMeter,
     OCEAPds,
+    OCEAPdsData,
     OCEAResident,
+    OCEARfcConsumptionData,
+    OCEAWaterConsumptionData,
 )
 
 __all__ = [
@@ -17,10 +35,25 @@ __all__ = [
     "OCEAApiClient",
     "OCEAApiError",
     "OCEAAuthError",
+    "OCEAConnectionError",
+    "OCEAConsumptionData",
+    "OCEAConsumptionDataItem",
+    "OCEAConsumptionRequest",
+    "OCEAConsumptionSeries",
+    "OCEADashboardData",
+    "OCEADeviceData",
+    "OCEADevicesRequest",
     "OCEADwelling",
     "OCEADwellingDetails",
+    "OCEADwellingFluids",
+    "OCEAError",
+    "OCEAGenericConsumptionData",
     "OCEAMeter",
     "OCEAPds",
+    "OCEAPdsData",
     "OCEAResident",
+    "OCEAResponseError",
+    "OCEARfcConsumptionData",
+    "OCEAWaterConsumptionData",
     "OccupationStatus",
 ]

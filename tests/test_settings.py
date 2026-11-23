@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import tomllib
 from pathlib import Path
 from types import ModuleType
 
@@ -16,6 +17,8 @@ CI_WORKFLOW_PATH = Path(__file__).parents[1] / ".github" / "workflows" / "ci.yml
 RELEASE_WORKFLOW_PATH = (
     Path(__file__).parents[1] / ".github" / "workflows" / "release.yml"
 )
+PYPROJECT_PATH = Path(__file__).parents[1] / "pyproject.toml"
+PYTEST_CONFIG_PATH = Path(__file__).parents[1] / "pytest.ini"
 
 
 def _assert_ci_quality_gate(workflow: str) -> None:
@@ -30,15 +33,17 @@ def _assert_ci_quality_gate(workflow: str) -> None:
     assert "--with homeassistant==2026.7.3" in workflow
     assert "--with pytest-homeassistant-custom-component" in workflow
     assert "python -m pytest -q" in workflow
+    assert "uv run --locked --package ocea-client --python 3.14.2" in workflow
+    assert "python -m unittest discover -s ocea_tests -v" in workflow
+    assert "uv build --package ocea-client" in workflow
     assert 'uvx --from "ruff==0.16.1"' in workflow
-    assert "ruff check custom_components tests" in workflow
+    assert "ruff check custom_components tests ocea_tests" in workflow
     assert "--with mypy==1.18.2" in workflow
-    assert "python -m mypy --strict --disallow-any-explicit --follow-imports=silent" in workflow
-    assert "custom_components/ocea_smart_building/ocea" in workflow
+    assert "python -m mypy" in workflow
     assert "--with pytest-cov==7.1.0" in workflow
     assert "--cov=custom_components.ocea_smart_building.ocea" in workflow
     assert "python3 scripts/check_ocea_coverage.py" in workflow
-    assert "python -m compileall -q custom_components tests ocea_cli.py" in workflow
+    assert "python -m compileall -q custom_components tests ocea_tests ocea_cli.py" in workflow
     assert "python3 -m json.tool" in workflow
     assert "custom_components/ocea_smart_building/manifest.json" in workflow
     assert "custom_components/ocea_smart_building/strings.json" in workflow
@@ -70,6 +75,41 @@ def test_manifest_and_user_agent_versions_are_aligned() -> None:
     assert constants.INTEGRATION_VERSION == manifest["version"]
     assert manifest["name"] == "OCEA Smart Building"
     assert f"Home-Assistant-OCEA-Smart-Building/{manifest['version']}" in constants.UA
+
+
+def test_ocea_client_is_packaged_and_strictly_typed() -> None:
+    """Keep the standalone source package and strict type-check target aligned."""
+    config = tomllib.loads(PYPROJECT_PATH.read_text(encoding="utf-8"))
+    client_config = tomllib.loads(
+        (INTEGRATION_PATH / "pyproject.toml").read_text(encoding="utf-8")
+    )
+    project = client_config["project"]
+    setuptools = client_config["tool"]["setuptools"]
+    mypy = config["tool"]["mypy"]
+
+    assert config["tool"]["uv"]["workspace"]["members"] == [
+        "custom_components/ocea_smart_building"
+    ]
+    assert project["name"] == "ocea-client"
+    assert project["requires-python"] == ">=3.12"
+    assert {"aiohttp", "yarl"} <= {
+        dependency.split(">=")[0] for dependency in project["dependencies"]
+    }
+    assert setuptools["packages"] == ["ocea"]
+    assert setuptools["package-dir"]["ocea"] == "ocea"
+    assert (INTEGRATION_PATH / "LICENSE").read_bytes() == (
+        PYPROJECT_PATH.parent / "LICENSE"
+    ).read_bytes()
+    assert mypy["strict"] is True
+    assert mypy["disallow_any_explicit"] is True
+    assert "custom_components/ocea_smart_building/ocea" in mypy["files"]
+    assert "custom_components/ocea_smart_building/coordinator.py" in mypy["files"]
+
+
+def test_standalone_client_tests_are_separate_from_homeassistant_pytest() -> None:
+    """Keep local-network client smoke tests out of HA's socket-blocked suite."""
+    config = PYTEST_CONFIG_PATH.read_text(encoding="utf-8")
+    assert "testpaths = tests" in config
 
 
 def test_release_workflow_is_tag_only() -> None:

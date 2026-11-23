@@ -134,6 +134,112 @@ receive their complete typed payload from the caller. Dynamic URL segments are
 encoded independently. The coordinator constructs the device and consumption
 requests for the configured dwelling.
 
+The source package is installable as `ocea-client`; it imports without Home
+Assistant and declares `aiohttp` and `yarl` as runtime dependencies. Its caller
+creates and owns the `aiohttp.ClientSession`, which lets Home Assistant retain
+its managed-session lifecycle while standalone applications can manage their
+own session. For example:
+
+```python
+import aiohttp
+
+from ocea import OCEAApiClient, OCEAResident
+
+
+async def load_resident(email: str, password: str, user_agent: str) -> OCEAResident:
+    async with aiohttp.ClientSession() as session:
+        client = OCEAApiClient(
+            email=email,
+            password=password,
+            user_agent=user_agent,
+            session=session,
+        )
+        return await client.get_resident()
+```
+
+Install the workspace client with `uv sync --package ocea-client` and run its
+Home-Assistant-free smoke tests with
+`uv run --locked --package ocea-client --python 3.14.2 python -m unittest discover -s ocea_tests`.
+The strict mypy configuration in `pyproject.toml` covers the client package
+and its coordinator boundary. Config-flow and history modules remain outside
+that strict target: current Home Assistant typing exposes a `FlowResult`
+override conflict in the config flow, and explicit `Any` or dynamic signatures
+in config-entry, Recorder, and Store APIs. The integration test suite continues
+to exercise those modules.
+Run the type check with
+`uv run --python 3.14.2 --with homeassistant==2026.7.3 --with mypy==1.18.2 python -m mypy`.
+
+Client failures share the `OCEAError` base class. `OCEAAuthError` identifies
+authentication failures; `OCEAConnectionError` distinguishes transport
+failures; `OCEAResponseError` identifies malformed API responses; and
+`OCEAApiError` retains HTTP status information for API-level failures.
+Connection and response errors are also `OCEAApiError` instances for backwards
+compatibility with existing callers. The client retries an expired access token
+once; longer-lived history retries remain owned by the integration.
+
+## Shared client with the manual CLI
+
+`ocea_cli.py` is a separate executable in this repository. It currently
+implements its own synchronous API transport and B2C flow; the shared client
+must become the sole owner of API communication in a later migration. This PR
+does not change the CLI or its command-line behavior.
+
+Target after the follow-up migrations:
+
+```mermaid
+flowchart LR
+    cli["ocea_cli"]
+    ha["Home Assistant integration"]
+    client["ocea-client Python package"]
+    b2c["Azure AD B2C"]
+    api["OCEA resident API"]
+    cli --> client
+    ha --> client
+    client --> b2c
+    client --> api
+```
+
+Neither consumer depends on the other; the client imports neither consumer.
+
+| Capability | `ocea-client` | `ocea_cli.py` today | Migration note |
+| --- | --- | --- | --- |
+| HTTP transport | Async `aiohttp`; caller supplies and closes the session. | Sync `requests.Session`; the CLI owns its context. | Prefer migrating the CLI orchestration to async and keep formatting/argument parsing synchronous. Avoid adding two transports to the shared client. |
+| Authentication | B2C authorization-code flow, PKCE, cookies, token refresh, one retry after HTTP 401. | Separate B2C/PKCE implementation; returns access and refresh tokens, but does not refresh during API calls. | The flows are similar but not wire-identical: the CLI sends extra browser client-hint headers and uses a different User-Agent. Compare and test these headers before removing either implementation. |
+| Endpoints | Resident, dashboard totals, dwelling fluids/details/consumption, PDS, devices, and PDS consumption. | Resident, dashboard totals, dwelling fluids/consumption, PDS, and PDS consumption. | All CLI data endpoints exist in the client; `get_appareils` is extra and not needed by the CLI. No pagination is implemented or indicated by the current endpoint code. |
+| Models | Typed resident, PDS, dashboard, and consumption models; `Decimal` readings and raw fields retained. | Raw dictionaries validated and formatted for terminal output. | The CLI can keep owning date defaults, date-range validation, field counts, missing-day warnings, labels, and output formatting. |
+| Errors | `OCEAError` hierarchy with auth, connection, response, and API errors. | `OCEACliError` plus `requests.RequestException`; endpoint failures are reported independently and produce a nonzero exit. | The future CLI adapter must translate shared exceptions to the existing safe messages and exit behavior without logging credentials or response data. |
+
+Two compatibility questions must be resolved before migrating the CLI:
+
+- The CLI accepts a numeric `logementId` and converts it to a string, whereas
+  `OCEAResident.from_api` currently requires a string. Confirm the actual API
+  contract with representative anonymized responses before relaxing the model.
+- `--dump-tokens` explicitly displays token prefixes; the shared client keeps
+  tokens private. If that flag remains supported, design an explicit,
+  opt-in token-access API for the CLI rather than exposing tokens by default.
+
+The CLI also requests dates using its machine-local calendar, while Home
+Assistant uses the OCEA/Paris calendar. The client accepts an explicit typed
+consumption payload, so each consumer can preserve its current date policy.
+Unknown response fields are retained by the client models, allowing the CLI to
+continue reporting counts without moving presentation concerns into the library.
+
+## Workspace and consumer migration plan
+
+The root `pyproject.toml` defines a uv workspace and shared development tools.
+The client project lives in `custom_components/ocea_smart_building/`, alongside
+its `ocea/` source. The integration uses that embedded source directly, so HACS
+installs it without requiring a separately published client. The client can also
+be built or installed locally as `ocea-client` without Home Assistant; its
+project version is independent of the integration version.
+
+The CLI remains unchanged for now. A future CLI migration can use the local
+workspace client, adapt its orchestration to async, and retain its existing
+flags, sanitized output, per-endpoint failure handling, and exit codes. That
+change must also update the CLI's dependency documentation and `AGENTS.md`.
+Publication and any switch to an external dependency are deferred until the
+client is stable; no separate repository is required.
+
 ## Runtime flow
 
 The initial setup, reauthentication, and reconfiguration flows validate the

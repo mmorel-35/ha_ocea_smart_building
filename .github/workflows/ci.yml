@@ -32,6 +32,16 @@ jobs:
           python-version: "3.14.2"
           enable-cache: true
 
+      - name: Test OCEA client without Home Assistant
+        run: >-
+          uv run --locked --package ocea-client --python 3.14.2
+          python -m unittest discover -s ocea_tests -v
+
+      - name: Build OCEA client distribution
+        run: >-
+          uv build --package ocea-client
+          --out-dir "${{ runner.temp }}/ocea-dist"
+
       - name: Run Home Assistant and quality scale tests
         run: >-
           uv run --python 3.14.2
@@ -51,20 +61,19 @@ jobs:
       - name: Run Ruff
         run: >-
           uvx --from "ruff==0.16.1"
-          ruff check custom_components tests
+          ruff check custom_components tests ocea_tests
 
-      - name: Type-check OCEA client
+      - name: Type-check OCEA client and coordinator
         run: >-
           uv run --python 3.14.2
           --with homeassistant==2026.7.3
           --with mypy==1.18.2
-          python -m mypy --strict --disallow-any-explicit --follow-imports=silent
-          custom_components/ocea_smart_building/ocea
+          python -m mypy
 
       - name: Check Python compilation
         run: >-
           uv run --python 3.14.2
-          python -m compileall -q custom_components tests ocea_cli.py
+          python -m compileall -q custom_components tests ocea_tests ocea_cli.py
 
       - name: Validate JSON files
         run: |

@@ -107,7 +107,13 @@ uv run --python 3.14.2 \
   --with homeassistant==2026.7.3 \
   --with pytest-homeassistant-custom-component \
   python -m pytest -q
-uv run --python 3.14.2 python -m compileall -q custom_components tests ocea_cli.py
+uv run --locked --package ocea-client --python 3.14.2 \
+  python -m unittest discover -s ocea_tests -v
+uv run --python 3.14.2 \
+  --with homeassistant==2026.7.3 \
+  --with mypy==1.18.2 \
+  python -m mypy
+uv run --python 3.14.2 python -m compileall -q custom_components tests ocea_tests ocea_cli.py
 python3 -m json.tool custom_components/ocea_smart_building/manifest.json >/dev/null
 python3 -m json.tool custom_components/ocea_smart_building/strings.json >/dev/null
 python3 -m json.tool custom_components/ocea_smart_building/translations/en.json >/dev/null
@@ -120,7 +126,7 @@ git diff --check
 - Run the pinned Ruff lint command used by CI:
 
 ```bash
-uvx --from "ruff==0.16.1" ruff check custom_components tests
+uvx --from "ruff==0.16.1" ruff check custom_components tests ocea_tests
 ```
 
 - Keep detailed tests for the CI and release workflow contracts, including

@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ocea-client"
+version = "0.1.0"
+description = "Asynchronous Python client for the OCEA Smart Building resident API"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "aiohttp>=3.9",
+    "yarl>=1.9",
+]
+
+[tool.setuptools]
+packages = ["ocea"]
+package-dir = { ocea = "ocea" }
+package-data = { ocea = ["py.typed"] }

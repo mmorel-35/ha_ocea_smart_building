@@ -9,14 +9,14 @@ from collections.abc import Callable, Mapping
 from hashlib import blake2b
 from itertools import islice
 from json import JSONDecodeError
-from typing import TypeGuard, TypeVar, cast
+from typing import TypeGuard
 from urllib.parse import quote
 
-from aiohttp import ClientSession, ClientTimeout
+from aiohttp import ClientError, ClientSession, ClientTimeout
 
 from .auth import OCEAAuthentication
 from .const import API_BASE, B2C_REDIRECT_URI
-from .exceptions import OCEAApiError
+from .exceptions import OCEAApiError, OCEAConnectionError, OCEAResponseError
 from .models import (
     OCEAConsumptionRequest,
     OCEAConsumptionSeries,
@@ -27,6 +27,7 @@ from .models import (
     OCEADwellingFluids,
     OCEAPdsData,
     OCEAResident,
+    _is_object_mapping,
     is_consumption_response,
     is_dashboard_consumption,
     is_device_response,
@@ -35,7 +36,6 @@ from .models import (
 
 _LOGGER = logging.getLogger(__name__)
 _TIMEOUT = ClientTimeout(total=30)
-_ResponseT = TypeVar("_ResponseT", bound=Mapping[str, object])
 _KNOWN_FIELDS = frozenset({
     "resident", "occupations", "local", "adresse", "id", "logementId",
     "dateDebut", "dateFin", "prenom", "numeroRue", "complement", "codePostal",
@@ -78,6 +78,20 @@ class OCEAApiClient:
         *,
         diagnostic: str | None = None,
     ) -> object:
+        """Make an authenticated API request and classify transport failures."""
+        try:
+            return await self._request_api(method, path, payload, diagnostic=diagnostic)
+        except (ClientError, TimeoutError) as err:
+            raise OCEAConnectionError("Unable to connect to OCEA") from err
+
+    async def _request_api(
+        self,
+        method: str,
+        path: str,
+        payload: Mapping[str, object] | None = None,
+        *,
+        diagnostic: str | None = None,
+    ) -> object:
         """Make an authenticated API request, refreshing once on 401."""
         if not self._auth.access_token:
             await self._auth.authenticate()
@@ -106,7 +120,7 @@ class OCEAApiClient:
                     try:
                         result: object = await response.json(content_type=None)
                     except (JSONDecodeError, UnicodeDecodeError) as err:
-                        raise OCEAApiError("Invalid API JSON response") from err
+                        raise OCEAResponseError("Invalid API JSON response") from err
                     if diagnostic is not None and _LOGGER.isEnabledFor(logging.DEBUG):
                         self._log_response(diagnostic, result)
                     return result
@@ -210,7 +224,10 @@ class OCEAApiClient:
 
     async def validate_credentials(self) -> None:
         """Validate credentials through B2C without requesting resident data."""
-        await self._auth.authenticate()
+        try:
+            await self._auth.authenticate()
+        except (ClientError, TimeoutError) as err:
+            raise OCEAConnectionError("Unable to connect to OCEA authentication") from err
 
     def _log_response(self, endpoint: str, response: object) -> None:
         """Log bounded JSON shape without exposing keys or values from the account."""
@@ -264,23 +281,23 @@ def _format_category(field: str, value: object) -> str:
 
 def _object_response(response: object) -> dict[str, object]:
     """Validate the outer shape of an API object response."""
-    if not isinstance(response, dict) or not all(isinstance(key, str) for key in response):
-        raise OCEAApiError("Invalid API object response")
-    return cast(dict[str, object], response)
+    if not _is_object_mapping(response):
+        raise OCEAResponseError("Invalid API object response")
+    return response
 
 
 def _list_response(response: object) -> list[dict[str, object]]:
     """Validate the outer shape of a list of API objects."""
     if not isinstance(response, list):
-        raise OCEAApiError("Invalid API list response")
+        raise OCEAResponseError("Invalid API list response")
     return [_object_response(item) for item in response]
 
 
-def _validated_response(
+def _validated_response[ResponseT: Mapping[str, object]](
     response: dict[str, object],
-    validate: Callable[[dict[str, object]], TypeGuard[_ResponseT]],
-) -> _ResponseT:
+    validate: Callable[[dict[str, object]], TypeGuard[ResponseT]],
+) -> ResponseT:
     """Return only responses whose known fields have been validated."""
     if not validate(response):
-        raise OCEAApiError("Invalid API response")
+        raise OCEAResponseError("Invalid API response")
     return response

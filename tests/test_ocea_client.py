@@ -17,8 +17,10 @@ from custom_components.ocea_smart_building.ocea import (
     OCEAApiClient,
     OCEAApiError,
     OCEAAuthError,
+    OCEAConnectionError,
     OCEADwellingDetails,
     OCEAResident,
+    OCEAResponseError,
 )
 
 pytestmark = pytest.mark.usefixtures("local_http_only")
@@ -259,6 +261,30 @@ async def test_refresh_without_access_token_fails(aiohttp_server, monkeypatch):
             await client._auth.refresh_access_token()
 
 
+async def test_api_transport_error_is_typed_and_chained():
+    async with aiohttp.ClientSession() as session:
+        client = _client(session)
+        client._auth.authenticate = AsyncMock(
+            side_effect=aiohttp.ClientConnectionError("offline")
+        )
+        with pytest.raises(OCEAConnectionError) as error:
+            await client._api_request("GET", "/api/test")
+
+    assert isinstance(error.value.__cause__, aiohttp.ClientConnectionError)
+
+
+async def test_authentication_transport_error_is_typed_and_chained():
+    async with aiohttp.ClientSession() as session:
+        client = _client(session)
+        client._auth.authenticate = AsyncMock(
+            side_effect=aiohttp.ClientConnectionError("offline")
+        )
+        with pytest.raises(OCEAConnectionError) as error:
+            await client.validate_credentials()
+
+    assert isinstance(error.value.__cause__, aiohttp.ClientConnectionError)
+
+
 async def test_client_targets_each_requested_dwelling(aiohttp_server, monkeypatch):
     """One authenticated client can address distinct dwellings."""
     state = {"api_response": []}
@@ -347,7 +373,7 @@ async def test_invalid_dwelling_fluids(aiohttp_server, monkeypatch, response):
     async with aiohttp.ClientSession() as session:
         client = _client(session)
         client._auth._access_token = "token-placeholder"
-        with pytest.raises(OCEAApiError, match="Invalid dwelling fluid"):
+        with pytest.raises(OCEAResponseError, match="Invalid dwelling fluid"):
             await client.get_dwelling_fluids("local")
 
 
@@ -390,7 +416,7 @@ async def test_invalid_dwelling_details_response(aiohttp_server, monkeypatch, re
     async with aiohttp.ClientSession() as session:
         client = _client(session)
         client._auth._access_token = "token-placeholder"
-        with pytest.raises(OCEAApiError):
+        with pytest.raises(OCEAResponseError):
             await client.get_dwelling_details("other-local")
 
 
@@ -434,7 +460,7 @@ async def test_get_resident_rejects_invalid_occupation(aiohttp_server, monkeypat
     async with aiohttp.ClientSession() as session:
         client = _client(session)
         client._auth._access_token = "token-placeholder"
-        with pytest.raises(OCEAApiError, match="Invalid dwelling identifier"):
+        with pytest.raises(OCEAResponseError, match="Invalid dwelling identifier"):
             await client.get_resident()
 
 
@@ -455,7 +481,7 @@ async def test_invalid_resident_response(aiohttp_server, monkeypatch, response):
     async with aiohttp.ClientSession() as session:
         client = _client(session)
         client._auth._access_token = "token-placeholder"
-        with pytest.raises(OCEAApiError, match="Invalid API object"):
+        with pytest.raises(OCEAResponseError, match="Invalid API object"):
             await client.get_resident()
 
 
@@ -465,7 +491,7 @@ async def test_invalid_list_response(aiohttp_server, monkeypatch):
     async with aiohttp.ClientSession() as session:
         client = _client(session)
         client._auth._access_token = "token-placeholder"
-        with pytest.raises(OCEAApiError, match="Invalid API list"):
+        with pytest.raises(OCEAResponseError, match="Invalid API list"):
             await client.get_pds("local-123")
 
 

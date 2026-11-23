@@ -1,0 +1,18 @@
+[tool.uv.workspace]
+members = ["custom_components/ocea_smart_building"]
+
+[tool.ruff]
+target-version = "py312"
+
+[tool.mypy]
+python_version = "3.14"
+files = [
+    "custom_components/ocea_smart_building/ocea",
+    "custom_components/ocea_smart_building/coordinator.py",
+]
+strict = true
+disallow_any_explicit = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+no_implicit_optional = true
+follow_imports = "silent"

@@ -29,7 +29,9 @@ from custom_components.ocea_smart_building.ocea import (
     OCEAApiClient,
     OCEAApiError,
     OCEAAuthError,
+    OCEAConnectionError,
     OCEAMeter,
+    OCEAResponseError,
 )
 from custom_components.ocea_smart_building.ocea.models import (
     OCEAConsumptionSeries,
@@ -120,6 +122,20 @@ def test_current_month_payload_at_paris_calendar_boundaries(
 def test_coordinator_error_does_not_expose_exception_details(error: Exception) -> None:
     """Network and unexpected exception details may contain credentials."""
     assert "secret-url" not in str(_as_update_error(error))
+
+
+@pytest.mark.parametrize(
+    ("error", "message"),
+    [
+        (OCEAAuthError("invalid credentials"), "Authentication failed"),
+        (OCEAConnectionError("offline"), "Error connecting to OCEA"),
+        (OCEAResponseError("invalid payload"), "Invalid response from OCEA"),
+        (OCEAApiError("HTTP 503", status=503), "Error fetching data"),
+    ],
+)
+def test_coordinator_classifies_ocea_errors(error: Exception, message: str) -> None:
+    """Translate client exception categories into distinct coordinator errors."""
+    assert message in str(_as_update_error(error))
 
 
 async def test_coordinator_uses_ocea_timezone(
