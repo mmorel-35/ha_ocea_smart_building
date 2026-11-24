@@ -35,6 +35,8 @@ def test_system_health_info_labels_are_translated() -> None:
     expected_keys = {
         "can_reach_server",
         "last_update_success",
+        "dashboard_available",
+        "pds_available",
         "meter_count",
         "meter_readings_available",
         "meter_readings_unavailable",
@@ -98,6 +100,8 @@ async def test_system_health_info_reports_last_update_success(
         info = await system_health_info(hass)
 
     assert info["last_update_success"] is True
+    assert info["dashboard_available"] is False
+    assert info["pds_available"] is False
     assert await info["can_reach_server"] == "ok"
 
 
@@ -151,6 +155,8 @@ async def test_system_health_info_reports_partial_meter_readings(
         last_update_success=True,
         data=OCEAData(
             totals={},
+            dashboard_available=False,
+            pds_available=True,
             meters={
                 available_meter.identifier: OCEAMeterReading(
                     meter=available_meter, value=Decimal("0.321"), latest_date=date(2026, 11, 8)
@@ -176,6 +182,8 @@ async def test_system_health_info_reports_partial_meter_readings(
         info = await system_health_info(hass)
 
     assert info["meter_count"] == 2
+    assert info["dashboard_available"] is False
+    assert info["pds_available"] is True
     assert info["meter_readings_available"] == 1
     assert info["meter_readings_unavailable"] == 1
     assert not any("meter-" in key for key in info)
@@ -272,6 +280,8 @@ async def test_system_health_tracks_real_entry_lifecycle(hass: HomeAssistant) ->
         assert await info.pop("can_reach_server") == "ok"
         assert info == {
             "last_update_success": True,
+            "dashboard_available": True,
+            "pds_available": True,
             "meter_count": 1,
             "meter_readings_available": 1,
             "meter_readings_unavailable": 0,

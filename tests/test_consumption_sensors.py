@@ -14,8 +14,10 @@ from homeassistant.const import UnitOfVolume
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.typing import UNDEFINED
+from homeassistant.helpers.update_coordinator import UpdateFailed
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
+from custom_components.ocea_smart_building.binary_sensor import OCEALeakBinarySensor
 from custom_components.ocea_smart_building.const import CONF_LOCAL_ID, DOMAIN
 from custom_components.ocea_smart_building.coordinator import (
     OCEAData,
@@ -509,6 +511,76 @@ async def test_coordinator_keeps_other_meters_when_one_fails(
     assert data.totals["eau_froide"] == Decimal("1.14")
     assert set(data.meters) == {"pds-cold-1", "pds-cold-2"}
     assert data.meters["pds-cold-2"].value is None
+
+
+@pytest.mark.parametrize(
+    ("dashboard_fails", "pds_fails"),
+    [(False, False), (True, False), (False, True), (True, True)],
+)
+async def test_coordinator_refreshes_dashboard_and_pds_independently(
+    hass: HomeAssistant,
+    caplog: pytest.LogCaptureFixture,
+    dashboard_fails: bool,
+    pds_fails: bool,
+) -> None:
+    """Each source is attempted independently and its availability is explicit."""
+    client = AsyncMock(spec=OCEAApiClient)
+    if dashboard_fails:
+        client.get_consumptions.side_effect = OCEAApiError("dashboard unavailable")
+    else:
+        client.get_consumptions.return_value = [
+            OCEADashboardData.from_api({"fluide": "EauFroide", "valeur": "1.14"}),
+        ]
+    meter = OCEAMeter.from_api(
+        {"id": "pds-cold-1", "fluide": "EauFroide"},
+        None,
+    )
+    coordinator = _coordinator(hass, client)
+    coordinator._meters = {meter.identifier: meter}
+    if pds_fails:
+        client.get_pds_consumption.side_effect = OCEAApiError("meter unavailable")
+    else:
+        client.get_pds_consumption.return_value = OCEAConsumptionSeries.from_api({
+            "consommations": [{
+                "date": "2026-09-15",
+                "valeur": 0.321,
+                "fuiteEstimee": 0.01,
+                "type": "ConsommationEauResponse",
+            }],
+        })
+
+    with caplog.at_level(logging.WARNING):
+        if dashboard_fails and pds_fails:
+            with pytest.raises(UpdateFailed):
+                await coordinator._async_update_data()
+            data = None
+        else:
+            data = await coordinator._async_update_data()
+
+    client.get_consumptions.assert_awaited_once_with("local-123")
+    client.get_pds_consumption.assert_awaited_once()
+    assert caplog.text.count("Unable to update OCEA dashboard data") == int(dashboard_fails)
+    assert caplog.text.count("Unable to update 1 OCEA meter readings") == int(pds_fails)
+    if data is None:
+        entity_coordinator = Mock(data=None, last_update_success=True)
+    else:
+        entity_coordinator = Mock(data=data, last_update_success=True)
+    description = next(description for description in SENSOR_TYPES if description.key == "fuite")
+    sensor = OCEAMeterSensor(entity_coordinator, description, "local-123", meter)
+    leak_binary_sensor = OCEALeakBinarySensor(entity_coordinator, "local-123", meter)
+    assert sensor.available is (data is not None and not pds_fails)
+    assert leak_binary_sensor.available is (data is not None and not pds_fails)
+    if data is None:
+        return
+
+    assert data.dashboard_available is not dashboard_fails
+    assert data.pds_available is not pds_fails
+    if dashboard_fails:
+        assert data.totals is None
+    else:
+        assert data.totals == {"eau_froide": Decimal("1.14")}
+    reading = data.meters[meter.identifier]
+    assert (reading.estimated_leak is not None) is not pds_fails
 
 
 async def test_coordinator_does_not_log_meter_details(

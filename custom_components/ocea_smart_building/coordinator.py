@@ -60,8 +60,10 @@ class OCEAMeterReading:
 class OCEAData:
     """Coordinator payload: dwelling totals and per-meter readings."""
 
-    totals: dict[str, Decimal]
+    totals: dict[str, Decimal] | None
     meters: dict[str, OCEAMeterReading]
+    dashboard_available: bool = True
+    pds_available: bool = True
 
 
 _LOGGER = logging.getLogger(__name__)
@@ -203,17 +205,45 @@ class OCEADataUpdateCoordinator(DataUpdateCoordinator[OCEAData]):
     async def _async_update_data(self) -> OCEAData:
         """Fetch data from the OCEA API."""
         _LOGGER.debug("OCEA coordinator: starting data fetch")
+        dashboard_data: list[OCEADashboardData] | None = None
+        dashboard_error: Exception | None = None
         try:
-            raw_data = await self.client.get_consumptions(self._local_id)
-            payload = _current_month_payload(dt_util.now())
-            meters = await self._fetch_readings(payload)
-        except Exception as err:
-            raise _as_update_error(err) from err
+            dashboard_data = await self.client.get_consumptions(self._local_id)
+        except Exception as err:  # noqa: BLE001
+            dashboard_error = err
+            _LOGGER.warning("Unable to update OCEA dashboard data")
 
-        data = OCEAData(totals=self._aggregate_totals(raw_data), meters=meters)
+        pds_error: Exception | None = None
+        try:
+            payload = _current_month_payload(dt_util.now())
+            meters, pds_error = await self._fetch_readings(payload)
+        except Exception as err:  # noqa: BLE001
+            pds_error = err
+            meters = {
+                pds_id: OCEAMeterReading(meter=meter, value=None, latest_date=None)
+                for pds_id, meter in self._meters.items()
+            }
+            _LOGGER.warning("Unable to update OCEA meter readings")
+
+        if dashboard_error is not None and pds_error is not None:
+            error = (
+                dashboard_error
+                if isinstance(dashboard_error, OCEAAuthError)
+                else pds_error
+                if isinstance(pds_error, OCEAAuthError)
+                else dashboard_error
+            )
+            raise _as_update_error(error) from error
+
+        data = OCEAData(
+            totals=self._aggregate_totals(dashboard_data) if dashboard_data is not None else None,
+            meters=meters,
+            dashboard_available=dashboard_error is None,
+            pds_available=pds_error is None,
+        )
         _LOGGER.debug(
             "OCEA consumption data updated: %d aggregate values, %d individual meters",
-            len(data.totals),
+            len(data.totals or {}),
             len(data.meters),
         )
         return data
@@ -235,21 +265,26 @@ class OCEADataUpdateCoordinator(DataUpdateCoordinator[OCEAData]):
             for item in pds_data
         }
 
-    async def _fetch_readings(self, payload: OCEAConsumptionRequest) -> dict[str, OCEAMeterReading]:
+    async def _fetch_readings(
+        self, payload: OCEAConsumptionRequest
+    ) -> tuple[dict[str, OCEAMeterReading], Exception | None]:
         """Fetch current-month consumption for each meter."""
         readings = {
             pds_id: OCEAMeterReading(meter=meter, value=None, latest_date=None)
             for pds_id, meter in self._meters.items()
         }
+        first_error: Exception | None = None
+        failed_readings = 0
         for pds_id, meter in self._meters.items():
             try:
                 response = await self.client.get_pds_consumption(self._local_id, pds_id, payload)
                 readings[pds_id] = _build_meter_data(meter, response)
-            except OCEAAuthError:
-                raise
-            except (OCEAApiError, ClientError, TimeoutError):
-                _LOGGER.warning("Unable to update one OCEA meter")
-        return readings
+            except Exception as err:  # noqa: BLE001
+                first_error = first_error or err
+                failed_readings += 1
+        if failed_readings:
+            _LOGGER.warning("Unable to update %d OCEA meter readings", failed_readings)
+        return readings, first_error
 
     @staticmethod
     def _aggregate_totals(raw_data: list[OCEADashboardData]) -> dict[str, Decimal]:

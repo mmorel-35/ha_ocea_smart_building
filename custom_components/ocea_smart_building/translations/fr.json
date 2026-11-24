@@ -100,6 +100,8 @@
     "info": {
       "can_reach_server": "Serveur OCEA joignable",
       "last_update_success": "Dernière mise à jour réussie",
+      "dashboard_available": "Données Dashboard disponibles",
+      "pds_available": "Données des compteurs PDS disponibles",
       "meter_count": "Nombre de compteurs d’eau",
       "meter_readings_available": "Lectures de compteurs disponibles",
       "meter_readings_unavailable": "Lectures de compteurs indisponibles"

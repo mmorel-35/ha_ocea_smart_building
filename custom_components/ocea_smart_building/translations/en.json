@@ -100,6 +100,8 @@
     "info": {
       "can_reach_server": "Reachable OCEA server",
       "last_update_success": "Last update successful",
+      "dashboard_available": "Dashboard data available",
+      "pds_available": "PDS meter data available",
       "meter_count": "Number of water meters",
       "meter_readings_available": "Available meter readings",
       "meter_readings_unavailable": "Unavailable meter readings"

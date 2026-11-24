@@ -34,6 +34,18 @@ async def system_health_info(hass: HomeAssistant) -> dict[str, SystemHealthValue
         info["last_update_success"] = all(
             coordinator.last_update_success for coordinator in coordinators
         )
+        info["dashboard_available"] = all(
+            coordinator.last_update_success
+            and coordinator.data is not None
+            and coordinator.data.dashboard_available
+            for coordinator in coordinators
+        )
+        info["pds_available"] = all(
+            coordinator.last_update_success
+            and coordinator.data is not None
+            and coordinator.data.pds_available
+            for coordinator in coordinators
+        )
 
         data_coordinators = [
             coordinator for coordinator in coordinators if coordinator.data is not None

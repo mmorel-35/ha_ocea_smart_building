@@ -128,6 +128,14 @@ class OCEAMeterSensor(OCEAEntity, SensorEntity):
         self._attr_device_info = meter_device_info(local_id, meter)
 
     @property
+    def available(self) -> bool:
+        """Return whether this meter has a current leak estimate."""
+        if not super().available or self.coordinator.data is None:
+            return False
+        reading = self.coordinator.data.meters.get(self._meter.identifier)
+        return reading is not None and reading.estimated_leak is not None
+
+    @property
     def native_value(self) -> float | None:
         """Return this meter's estimated leak."""
         if self.coordinator.data is None:
