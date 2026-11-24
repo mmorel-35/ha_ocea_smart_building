@@ -18,6 +18,7 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.ocea_smart_building.const import CONF_LOCAL_ID, DOMAIN
 from custom_components.ocea_smart_building.coordinator import (
+    OCEADailyConsumption,
     OCEAData,
     OCEADataUpdateCoordinator,
     OCEAMeterReading,
@@ -279,6 +280,83 @@ def test_meter_data_builder_keeps_latest_leak_estimate() -> None:
     assert reading.estimated_leak == Decimal("0.015")
     assert reading.unit == "m3"
     assert reading.latest_date == date(2026, 9, 15)
+
+
+def test_meter_data_builder_preserves_consumption_metadata() -> None:
+    """Keep estimate and correction metadata on daily and latest readings."""
+    meter = OCEAMeter.from_api({"id": "pds-1", "fluide": "Cetc"}, None)
+    response = OCEAConsumptionSeries.from_api({
+        "unite": "kWh",
+        "consommations": [
+            {
+                "date": "2026-09-14",
+                "valeur": 1,
+                "type": "ConsommationResponse",
+                "isEstimated": True,
+            },
+            {
+                "date": "2026-09-15",
+                "valeur": 2,
+                "type": "ConsommationRfcResponse",
+                "isEstimated": False,
+                "valeurCoefficientee": "1,50",
+            },
+        ],
+    })
+
+    reading = _build_meter_data(meter, response)
+
+    assert reading.is_estimated is False
+    assert reading.corrected_value == Decimal("1.50")
+    assert reading.response_type == "ConsommationRfcResponse"
+    assert reading.daily_consumptions == (
+        OCEADailyConsumption(
+            day=date(2026, 9, 14),
+            value=Decimal(1),
+            response_type="ConsommationResponse",
+            is_estimated=True,
+        ),
+        OCEADailyConsumption(
+            day=date(2026, 9, 15),
+            value=Decimal(2),
+            response_type="ConsommationRfcResponse",
+            is_estimated=False,
+            corrected_value=Decimal("1.50"),
+        ),
+    )
+
+
+@pytest.mark.parametrize(
+    ("metadata", "expected_estimated", "expected_corrected"),
+    [
+        ({}, None, None),
+        ({"isEstimated": None, "valeurCoefficientee": None}, None, None),
+    ],
+)
+def test_meter_data_builder_preserves_absent_or_null_metadata(
+    metadata: dict[str, object],
+    expected_estimated: object,
+    expected_corrected: Decimal | None,
+) -> None:
+    """Absent and null optional fields remain unset in normalized readings."""
+    meter = OCEAMeter.from_api({"id": "pds-1", "fluide": "Cetc"}, None)
+    response = OCEAConsumptionSeries.from_api({
+        "unite": "kWh",
+        "consommations": [{
+            "date": "2026-09-15",
+            "valeur": 2,
+            "type": "ConsommationRfcResponse",
+            **metadata,
+        }],
+    })
+
+    reading = _build_meter_data(meter, response)
+
+    assert reading.is_estimated is expected_estimated
+    assert reading.corrected_value == expected_corrected
+    assert reading.daily_consumptions is not None
+    assert reading.daily_consumptions[0].is_estimated is expected_estimated
+    assert reading.daily_consumptions[0].corrected_value == expected_corrected
 
 
 def test_meter_data_builder_normalizes_string_leak_estimate() -> None:

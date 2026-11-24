@@ -28,6 +28,7 @@ from .ocea.models import (
     OCEAConsumptionSeries,
     OCEADashboardData,
     OCEADevicesRequest,
+    OCEARfcConsumptionData,
     OCEAUnclassifiedConsumptionData,
     OCEAWaterConsumptionData,
 )
@@ -40,6 +41,9 @@ class OCEADailyConsumption:
     day: date
     value: Decimal
     consent: bool | None = None
+    response_type: str | None = None
+    is_estimated: object = None
+    corrected_value: Decimal | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -53,6 +57,8 @@ class OCEAMeterReading:
     estimated_leak: Decimal | None = None
     consent: bool | None = None
     response_type: str | None = None
+    is_estimated: object = None
+    corrected_value: Decimal | None = None
     daily_consumptions: tuple[OCEADailyConsumption, ...] | None = None
 
 
@@ -82,7 +88,20 @@ def daily_consumptions_from_series(
             if isinstance(item.date, datetime)
             else item.date
         )
-        readings.append(OCEADailyConsumption(day, item.value, item.consent))
+        readings.append(
+            OCEADailyConsumption(
+                day=day,
+                value=item.value,
+                consent=item.consent,
+                response_type=item.response_type,
+                is_estimated=item.is_estimated,
+                corrected_value=(
+                    item.corrected_value
+                    if isinstance(item, OCEARfcConsumptionData)
+                    else None
+                ),
+            )
+        )
     return tuple(readings)
 
 
@@ -157,6 +176,12 @@ def _build_meter_data(meter: OCEAMeter, response: OCEAConsumptionSeries) -> OCEA
         estimated_leak=estimated_leak,
         consent=latest_item.consent if latest_item is not None else None,
         response_type=latest_item.response_type if latest_item is not None else None,
+        is_estimated=latest_item.is_estimated if latest_item is not None else None,
+        corrected_value=(
+            latest_item.corrected_value
+            if isinstance(latest_item, OCEARfcConsumptionData)
+            else None
+        ),
         daily_consumptions=daily_consumptions_from_series(response),
     )
 

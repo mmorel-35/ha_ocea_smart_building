@@ -102,6 +102,11 @@ incompletely understood variants. Type guards check the discriminator and
 variant fields before constructing the typed models, without rejecting
 previously accepted data.
 Legacy leak fields remain usable even when the discriminator is missing.
+The coordinator carries each reading's response type and estimate flag into
+daily consumption models, and carries RFC corrected values as finite
+`Decimal`s. The latest meter reading retains the same metadata alongside the
+existing leak and consent fields. Missing or null metadata remains `None`;
+the integration does not derive or expose these fields as entities.
 
 Dashboard and consumption values are converted to finite `Decimal` values at
 the API boundary. Dated readings use `date` for calendar-only dates and
